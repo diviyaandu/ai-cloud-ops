@@ -16,12 +16,14 @@ app.add_middleware(
 def home():
     return {"message": "AI Cloud Ops Running"}
 
+import psutil
+
 @app.get("/metrics")
 def metrics():
     return {
-        "cpu": randint(20, 95),
-        "memory": randint(30, 90),
-        "disk": randint(40, 85)
+        "cpu": psutil.cpu_percent(interval=1),
+        "memory": psutil.virtual_memory().percent,
+        "disk": psutil.disk_usage('/').percent
     }
 
 @app.get("/health")

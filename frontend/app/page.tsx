@@ -13,10 +13,20 @@ import {
 export default function Home() {
   const [metrics, setMetrics] = useState<any>(null);
 
+
+
   useEffect(() => {
+  const fetchMetrics = () => {
     fetch("http://127.0.0.1:8000/metrics")
       .then((res) => res.json())
       .then((data) => setMetrics(data));
+  };
+
+  fetchMetrics();
+
+  const interval = setInterval(fetchMetrics, 3000);
+
+  return () => clearInterval(interval);
   }, []);
 
   const chartData = metrics

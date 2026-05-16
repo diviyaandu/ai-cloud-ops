@@ -1,3 +1,13 @@
 git add .
 git commit -m "Added backend API"
 git push
+
+python -m uvicorn main:app --reload
+
+npm run dev
+
+git status
+git add .
+git commit -m "message"
+git push
+git pull

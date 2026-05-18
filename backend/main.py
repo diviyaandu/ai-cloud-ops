@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import psutil
 import os
 
+
 from dotenv import load_dotenv
 import ollama
 
@@ -67,8 +68,11 @@ def analyze():
     if disk > 90:
         alerts.append("Disk Almost Full")
 
+
     prompt = f"""
-    Analyze these system metrics.
+    You are an expert Site Reliability Engineer.
+
+    Analyze these system metrics and respond VERY BRIEFLY.
 
     CPU Usage: {cpu}%
     Memory Usage: {memory}%
@@ -77,10 +81,14 @@ def analyze():
     Active Alerts:
     {alerts}
 
-    Explain:
-    - possible issues
-    - severity
-    - recommended actions
+    Response format:
+
+    1. System Status
+    2. Main Problem
+    3. Severity (Low/Medium/High)
+    4. Recommended Action
+
+    Keep response concise and operational.
     """
 
     response = ollama.chat(

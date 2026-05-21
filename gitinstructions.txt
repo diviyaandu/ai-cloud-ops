@@ -1,5 +1,5 @@
 git add .
-git commit -m "Added backend API"
+git commit -m "changed to groq, improved frontend"
 git push
 
 python -m uvicorn main:app --reload

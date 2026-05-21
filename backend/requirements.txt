@@ -2,3 +2,20 @@ fastapi
 uvicorn
 psutil
 ollama
+
+# LangGraph + LangChain core (for the agent graph)
+langgraph>=0.2.0
+langchain-core>=0.3.0
+
+# Groq (already in your project, listed for completeness)
+groq>=0.9.0
+
+# Prometheus HTTP API client
+httpx>=0.27.0
+
+# System metrics (already installed)
+psutil>=5.9.0
+
+# Azure (install ONLY when you have credentials — not needed for mock mode)
+# azure-mgmt-costmanagement>=4.0.0
+# azure-identity>=1.17.0

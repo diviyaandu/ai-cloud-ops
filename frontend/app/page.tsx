@@ -9,7 +9,6 @@ import StatCard from "@/components/dashboard/StatCard";
 import MetricsChart from "@/components/dashboard/MetricsChart";
 import AlertsPanel from "@/components/dashboard/AlertsPanel";
 import AnalysisPanel from "@/components/dashboard/AnalysisPanel";
-import ChatPanel from "@/components/chat/ChatPanel";
 import AgentPanel from "@/components/chat/AgentPanel";
 
 export default function Home() {
@@ -147,14 +146,9 @@ export default function Home() {
           <AlertsPanel rawAlerts={metrics?.alerts ?? []} />
 
           {/* Row 3 — analysis (span 1) + old chat (span 1) + nothing OR collapse */}
+          {/* Row 3 — analysis (span 1) + agent panel (span 2) */}
           <AnalysisPanel onGroqCall={setGroqCalls} />
-          <ChatPanel onGroqCall={setGroqCalls} />
-
-          {/* spacer so AgentPanel starts on its own row cleanly */}
-          <div style={{ gridColumn: "span 1" }} />
-
-          {/* Row 4 — Agent panel full width */}
-          <div className="span-3 agent-panel">
+          <div className="span-2 agent-panel">
             <AgentPanel />
           </div>
         </div>

@@ -10,7 +10,7 @@ import os
 from typing import Any
 
 from groq import Groq
-from tools.registry import run_full_audit
+from mcp_server.client import mcp_call
 
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
 _client: Groq | None = None
@@ -23,18 +23,9 @@ def _groq() -> Groq:
     return _client
 
 
-SYSTEM_PROMPT = """You are an expert security engineer and cloud security auditor.
-You have been given a live security audit of a Linux server. Answer the user's question
-based on the audit findings.
-
-Guidelines:
-- Lead with the most serious finding (if any)
-- For each issue, explain: WHAT it is, WHY it matters, WHAT to do
-- Use severity language: CRITICAL / WARNING / OK
-- Be concise — 3–4 short paragraphs maximum
-- If everything looks clean, say so clearly and briefly
-- Don't pad the response with generic security advice unless directly relevant
-"""
+SYSTEM_PROMPT = """Security auditor AI. Given audit JSON, respond in 3 paragraphs max.
+Lead with worst finding. For each issue: what it is, why it matters, what to do.
+Use CRITICAL/WARNING/OK labels. If clean, say so briefly."""
 
 
 async def run(user_message: str, history: list[dict] | None = None) -> dict[str, Any]:
@@ -51,29 +42,28 @@ async def run(user_message: str, history: list[dict] | None = None) -> dict[str,
     """
     import asyncio
 
-    # 1. Run all security checks concurrently
+    # 1. Run all security checks via MCP server
     try:
-        audit = await run_full_audit()
+        audit = await mcp_call("run_full_audit")
     except Exception as e:
         audit = {"error": str(e), "overall_status": "unknown"}
 
     overall_status = audit.get("overall_status", "unknown")
 
-    # 2. Build prompt
-    audit_summary = json.dumps(audit, indent=2)
+    # Only status + one-line summary per check — no lists, no raw data
+    trimmed = {"overall_status": audit.get("overall_status")}
+    for key, val in audit.items():
+        if isinstance(val, dict) and key != "overall_status":
+            trimmed[key] = {
+                "status":  val.get("status", "unknown"),
+                "summary": val.get("summary", ""),
+            }
+    audit_summary = json.dumps(trimmed)
 
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-
-    if history:
-        messages.extend(history[-6:])
-
-    messages.append({
-        "role": "user",
-        "content": (
-            f"LIVE SECURITY AUDIT RESULTS:\n```json\n{audit_summary}\n```\n\n"
-            f"USER QUESTION: {user_message}"
-        ),
-    })
+    messages = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user", "content": f"AUDIT:\n{audit_summary}\n\nQ: {user_message}"},
+    ]
 
     # 3. Call Groq
     loop = asyncio.get_event_loop()

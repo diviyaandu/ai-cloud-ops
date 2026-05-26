@@ -7,7 +7,8 @@ Runs as the entry node in the LangGraph graph.
 Intent classes:
   - "operational"  → CPU, memory, disk, HTTP errors, Prometheus metrics
   - "security"     → ports, SSH failures, suspicious processes, audit
-  - "finops"       → Azure costs, budgets, spend anomalies
+  - "finops"       → Azure costs, budgets, spend, billing, resource inventory,
+                     unhealthy resources, untagged resources, resource graph
   - "general"      → catch-all, answered directly without a sub-agent
 """
 
@@ -34,12 +35,20 @@ SYSTEM_PROMPT = """You are a routing agent for a cloud operations AI system.
 Your ONLY job is to classify the user's message into exactly one of these categories:
 
   operational  — questions about system metrics, CPU, memory, disk, network,
-                 HTTP errors, Prometheus data, uptime, performance
+                 HTTP errors, Prometheus data, uptime, performance, node health
+
   security     — questions about open ports, SSH failures, suspicious processes,
-                 security audits, vulnerabilities, access control
+                 security audits, vulnerabilities, access control, login attempts
+
   finops       — questions about Azure costs, spend, budgets, billing,
-                 resource costs, cost anomalies, FinOps
+                 cost anomalies, resource inventory, Azure resources, resource groups,
+                 unhealthy Azure resources, untagged resources, resource graph,
+                 "show me my resources", "what resources do I have", "what's deployed"
+
   general      — greetings, off-topic, or anything that doesn't fit above
+
+Key rule: any question about Azure resources, cloud inventory, or what is deployed
+in Azure → always classify as "finops", even if the word "cost" is not used.
 
 Respond with ONLY a JSON object, no explanation:
 {"intent": "<category>", "confidence": <0.0-1.0>, "reasoning": "<one sentence>"}
@@ -79,8 +88,7 @@ async def classify_intent(user_message: str) -> dict:
     try:
         parsed = json.loads(raw)
     except json.JSONDecodeError:
-        # Fallback: default to operational if we can't parse
-        parsed = {"intent": "operational", "confidence": 0.5, "reasoning": "parse error — defaulting"}
+        parsed = {"intent": "general", "confidence": 0.5, "reasoning": "parse error — defaulting"}
 
     # Validate intent value
     valid = {"operational", "security", "finops", "general"}

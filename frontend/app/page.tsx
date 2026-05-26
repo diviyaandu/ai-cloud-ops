@@ -1,24 +1,22 @@
 "use client";
 
 import { useState } from "react";
-import { useMetrics } from "@/hooks/useMetrics";
-import { overallHealth, healthColor } from "@/lib/severity";
+import { useCloudResources } from "@/hooks/useCloudResources";
 
 import Header from "@/components/layout/Header";
-import StatCard from "@/components/dashboard/StatCard";
+import CloudStatCard from "@/components/dashboard/CloudStatCard";
 import MetricsChart from "@/components/dashboard/MetricsChart";
 import AlertsPanel from "@/components/dashboard/AlertsPanel";
 import AnalysisPanel from "@/components/dashboard/AnalysisPanel";
 import AgentPanel from "@/components/chat/AgentPanel";
 
 export default function Home() {
-  const { metrics, history, tick } = useMetrics();
+  const { data, loading } = useCloudResources();
   const [groqCalls, setGroqCalls] = useState(0);
 
-  const health = metrics
-    ? overallHealth(metrics.cpu, metrics.memory, metrics.disk)
-    : "UNKNOWN";
-  const color = healthColor(health);
+  // Derive a simple overall health pill from unhealthy count (extend later)
+  const health = data ? "LIVE" : "LOADING";
+  const color = data ? "#34d399" : "#4b5563";
 
   return (
     <>
@@ -26,7 +24,7 @@ export default function Home() {
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Syne:wght@400;700;800&display=swap');
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         body { background: #080b0f; color: #c9d1d9; font-family: 'JetBrains Mono', monospace; min-height: 100vh; }
-        .dashboard { max-width: 1280px; margin: 0 auto; padding: 28px 24px 48px; }
+        .dashboard { max-width: 1400px; margin: 0 auto; padding: 28px 24px 48px; }
         .header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 32px; padding-bottom: 20px; border-bottom: 1px solid #1e2a38; }
         .header-title { font-family: 'Syne', sans-serif; font-size: 28px; font-weight: 800; color: #e6edf3; letter-spacing: -0.5px; }
         .header-sub { font-size: 11px; color: #4a5568; margin-top: 4px; letter-spacing: 0.06em; text-transform: uppercase; }
@@ -35,12 +33,35 @@ export default function Home() {
         .health-dot { width: 6px; height: 6px; border-radius: 50%; animation: pulse 2s ease-in-out infinite; }
         @keyframes pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.5; transform: scale(0.75); } }
         .tick-counter { font-size: 10px; color: #374151; letter-spacing: 0.04em; }
+
+        /* ── Cloud resource cards row ────────────────────────────────── */
+        .cloud-cards-grid {
+          display: grid;
+          grid-template-columns: repeat(5, 1fr);
+          gap: 12px;
+          margin-bottom: 16px;
+        }
+        @media (max-width: 1100px) { .cloud-cards-grid { grid-template-columns: repeat(3, 1fr); } }
+        @media (max-width: 700px)  { .cloud-cards-grid { grid-template-columns: repeat(2, 1fr); } }
+
+        /* mode badge */
+        .mode-badge {
+          display: inline-flex; align-items: center; gap: 5px;
+          font-size: 9px; font-weight: 700; letter-spacing: 0.1em;
+          text-transform: uppercase; color: #34d399;
+          background: rgba(52,211,153,0.06); border: 1px solid rgba(52,211,153,0.15);
+          border-radius: 4px; padding: 2px 8px; margin-bottom: 12px;
+        }
+        .mode-dot { width: 5px; height: 5px; border-radius: 50%; background: #34d399; animation: pulse 2s ease-in-out infinite; }
+
+        /* ── Main grid (chart + alerts + analysis + agent) ───────────── */
         .main-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
         .span-3 { grid-column: span 3; }
         .span-2 { grid-column: span 2; }
         .span-1 { grid-column: span 1; }
         @media (max-width: 960px) { .main-grid { grid-template-columns: 1fr 1fr; } .span-3, .span-2 { grid-column: span 2; } }
         @media (max-width: 620px) { .main-grid { grid-template-columns: 1fr; } .span-3, .span-2, .span-1 { grid-column: span 1; } }
+
         .panel { background: #0d1117; border: 1px solid #1e2a38; border-radius: 10px; padding: 20px; position: relative; overflow: hidden; }
         .panel::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px; background: linear-gradient(90deg, transparent, #2dd4bf22, transparent); }
         .panel-title { font-family: 'Syne', sans-serif; font-size: 12px; font-weight: 700; color: #4b5563; letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 16px; }
@@ -63,24 +84,8 @@ export default function Home() {
         .dot-anim span:nth-child(2) { animation-delay: 0.2s; }
         .dot-anim span:nth-child(3) { animation-delay: 0.4s; }
         @keyframes blink { 0%, 80%, 100% { opacity: 0.2; } 40% { opacity: 1; } }
-        .chat-log { height: 220px; overflow-y: auto; margin-bottom: 12px; padding-right: 4px; scrollbar-width: thin; scrollbar-color: #1e2a38 transparent; }
-        .chat-log::-webkit-scrollbar { width: 4px; }
-        .chat-log::-webkit-scrollbar-thumb { background: #1e2a38; border-radius: 2px; }
-        .chat-msg { margin-bottom: 10px; font-size: 12px; line-height: 1.6; }
-        .chat-msg.user .msg-label { color: #60a5fa; }
-        .chat-msg.ai .msg-label { color: #34d399; }
-        .msg-label { font-size: 9px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 3px; }
-        .msg-text { color: #9ca3af; }
-        .chat-empty { color: #2d3748; font-size: 12px; }
-        .chat-input-row { display: flex; gap: 8px; }
-        .chat-input { flex: 1; background: #080b0f; border: 1px solid #1e2a38; border-radius: 6px; padding: 8px 12px; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #c9d1d9; outline: none; transition: border-color 0.2s; }
-        .chat-input::placeholder { color: #374151; }
-        .chat-input:focus { border-color: #2dd4bf44; }
-        .chat-send { background: #2dd4bf18; border: 1px solid #2dd4bf44; color: #2dd4bf; font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700; padding: 8px 14px; border-radius: 6px; cursor: pointer; letter-spacing: 0.06em; transition: background 0.2s, border-color 0.2s; }
-        .chat-send:hover { background: #2dd4bf28; border-color: #2dd4bf88; }
-        .chat-send:disabled { opacity: 0.4; cursor: not-allowed; }
 
-        /* ── Agent panel styles ────────────────────────────────────────────── */
+        /* ── Agent panel styles ──────────────────────────────────────── */
         .agent-panel { background: #0d1117; border: 1px solid #1e2a38; border-radius: 10px; position: relative; overflow: hidden; display: flex; flex-direction: column; min-height: 420px; }
         .agent-panel::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px; background: linear-gradient(90deg, transparent, #34d39922, transparent); pointer-events: none; }
         .agent-header { display: flex; align-items: center; gap: 10px; padding: 14px 20px; border-bottom: 1px solid #1e2a38; background: rgba(255,255,255,0.01); flex-wrap: wrap; }
@@ -131,22 +136,60 @@ export default function Home() {
         <Header
           health={health}
           healthColor={color}
-          tick={tick}
+          tick={0}
           groqCalls={groqCalls}
         />
 
+        {/* ── Cloud resource inventory cards ─────────────────────────── */}
+        {data && (
+          <div className="mode-badge">
+            <span className="mode-dot" />
+            {data.mode === "live" ? "Live · Azure Resource Graph" : "Mock data"}
+          </div>
+        )}
+
+        <div className="cloud-cards-grid">
+          <CloudStatCard
+            label="Total Resources"
+            value={data?.total ?? null}
+            icon="◈"
+            accent="#2dd4bf"
+            loading={loading}
+          />
+          <CloudStatCard
+            label="Virtual Machines"
+            value={data?.virtual_machines ?? null}
+            icon="⬡"
+            accent="#60a5fa"
+            loading={loading}
+          />
+          <CloudStatCard
+            label="AKS Clusters"
+            value={data?.aks_clusters ?? null}
+            icon="⬡"
+            accent="#a78bfa"
+            loading={loading}
+          />
+          <CloudStatCard
+            label="App Services"
+            value={data?.app_services ?? null}
+            icon="◇"
+            accent="#34d399"
+            loading={loading}
+          />
+          <CloudStatCard
+            label="Storage Accounts"
+            value={data?.storage_accounts ?? null}
+            icon="▦"
+            accent="#facc15"
+            loading={loading}
+          />
+        </div>
+
+        {/* ── Rest of dashboard ──────────────────────────────────────── */}
         <div className="main-grid">
-          {/* Row 1 — stat cards */}
-          <StatCard label="CPU Usage" value={metrics?.cpu ?? null} />
-          <StatCard label="Memory Usage" value={metrics?.memory ?? null} />
-          <StatCard label="Disk Usage" value={metrics?.disk ?? null} />
-
-          {/* Row 2 — chart (span 2) + alerts (span 1) */}
-          <MetricsChart history={history} />
-          <AlertsPanel rawAlerts={metrics?.alerts ?? []} />
-
-          {/* Row 3 — analysis (span 1) + old chat (span 1) + nothing OR collapse */}
-          {/* Row 3 — analysis (span 1) + agent panel (span 2) */}
+          <MetricsChart history={[]} />
+          <AlertsPanel rawAlerts={[]} />
           <AnalysisPanel onGroqCall={setGroqCalls} />
           <div className="span-2 agent-panel">
             <AgentPanel />

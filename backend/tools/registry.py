@@ -34,6 +34,15 @@ from tools.azure_cost import (
     get_full_cost_report,
 )
 
+from tools.azure_resource_graph import (
+    get_resource_inventory,
+    get_unhealthy_resources,
+    get_resource_group_summary,
+    get_recently_modified_resources,
+    get_untagged_resources,
+    get_full_resource_report,
+)
+
 # Tool registry: maps tool name (used in LangGraph) → callable
 TOOL_REGISTRY: dict = {
     # Operational / Prometheus
@@ -51,13 +60,20 @@ TOOL_REGISTRY: dict = {
     "check_root_equivalent_users":   check_root_equivalent_users,
     "check_world_writable_files":    check_world_writable_files,
     "run_full_audit":                run_full_audit,
-    # FinOps
+    # FinOps — Cost Management
     "get_monthly_spend":             get_monthly_spend,
     "get_daily_spend":               get_daily_spend,
     "get_cost_by_resource_group":    get_cost_by_resource_group,
     "get_budget_status":             get_budget_status,
     "get_cost_anomalies":            get_cost_anomalies,
     "get_full_cost_report":          get_full_cost_report,
+    # FinOps — Resource Graph
+    "get_resource_inventory":           get_resource_inventory,
+    "get_unhealthy_resources":          get_unhealthy_resources,
+    "get_resource_group_summary":       get_resource_group_summary,
+    "get_recently_modified_resources":  get_recently_modified_resources,
+    "get_untagged_resources":           get_untagged_resources,
+    "get_full_resource_report":         get_full_resource_report,
 }
 
 

@@ -2,7 +2,20 @@
 agents/operational.py
 
 Operational Agent — answers questions about system health using real Prometheus data.
-Fetches live metrics, then asks Groq to interpret them in context of the user's question.
+
+ARCHITECTURE CHANGE:
+  Before: metrics = await get_all_metrics()          [direct in-process call]
+  After:  metrics = await mcp_call("get_all_metrics") [HTTP → MCP server → tool]
+
+  The agent no longer imports or executes tool functions directly.
+  It sends an HTTP request to the MCP server, which owns tool execution.
+  The tool result comes back as JSON over the wire — identical shape to before.
+
+  Why this matters:
+    - The MCP server can be scaled, restarted, or swapped independently
+    - Tool execution is now observable at the network layer (logs, traces)
+    - Any future agent (or external client) can call the same tool the same way
+    - agents/ has zero direct dependency on tools/ module code
 """
 
 import json
@@ -10,7 +23,7 @@ import os
 from typing import Any
 
 from groq import Groq
-from tools.registry import get_all_metrics
+from mcp_server.client import mcp_call  # ← replaces: from tools.registry import get_all_metrics
 
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
 _client: Groq | None = None
@@ -37,7 +50,7 @@ Format your response in 2–3 short paragraphs maximum. Lead with the most impor
 
 async def run(user_message: str, history: list[dict] | None = None) -> dict[str, Any]:
     """
-    Fetch live metrics and generate an SRE-focused response.
+    Fetch live metrics via MCP server and generate an SRE-focused response.
 
     Returns:
         {
@@ -49,20 +62,26 @@ async def run(user_message: str, history: list[dict] | None = None) -> dict[str,
     """
     import asyncio
 
-    # 1. Fetch live Prometheus data
+    # 1. Fetch live Prometheus data through the MCP server.
+    #
+    #    OLD: metrics = await get_all_metrics()
+    #    NEW: metrics = await mcp_call("get_all_metrics")
+    #
+    #    The result dict is identical — only the execution path changed.
+    #    If the MCP server is down, mcp_call() raises RuntimeError and we
+    #    catch it below, same as before.
     try:
-        metrics = await get_all_metrics()
+        metrics = await mcp_call("get_all_metrics")
     except Exception as e:
         metrics = {"error": str(e), "overall_status": "unknown"}
 
     overall_status = metrics.get("overall_status", "unknown")
 
-    # 2. Build the prompt
+    # 2. Build the prompt (unchanged)
     metrics_summary = json.dumps(metrics, indent=2)
 
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
 
-    # Include recent conversation history (last 6 turns)
     if history:
         messages.extend(history[-6:])
 
@@ -74,7 +93,7 @@ async def run(user_message: str, history: list[dict] | None = None) -> dict[str,
         ),
     })
 
-    # 3. Call Groq
+    # 3. Call Groq (unchanged)
     loop = asyncio.get_event_loop()
 
     def _call():

@@ -38,3 +38,6 @@ app.include_router(agent_router)
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
+from routes.cloud_resources import router as cloud_resources_router
+app.include_router(cloud_resources_router)

@@ -35,9 +35,9 @@ def _get_credential():
     if _credential is None:
         from azure.identity import ClientSecretCredential
         _credential = ClientSecretCredential(
-            tenant_id=AZURE_TENANT_ID,
-            client_id=AZURE_CLIENT_ID,
-            client_secret=AZURE_CLIENT_SECRET,
+            tenant_id=os.getenv("AZURE_TENANT_ID", ""),
+            client_id=os.getenv("AZURE_CLIENT_ID", ""),
+            client_secret=os.getenv("AZURE_CLIENT_SECRET", ""),
         )
     return _credential
 
@@ -109,6 +109,9 @@ async def get_full_cost_report() -> dict[str, Any]:
 def _run_cost_query(query_def) -> list:
     """Execute a Cost Management query synchronously (called via executor)."""
     from azure.mgmt.costmanagement import CostManagementClient
+    sub_id = os.getenv("AZURE_SUBSCRIPTION_ID", "")  # ← read here, not at top
+    if not sub_id:
+        raise ValueError("AZURE_SUBSCRIPTION_ID is not set")
     client = CostManagementClient(_get_credential())
     scope = f"/subscriptions/{AZURE_SUBSCRIPTION_ID}"
     result = client.query.usage(scope, query_def)
@@ -253,8 +256,9 @@ async def _real_budget_status() -> dict[str, Any]:
 
     def _fetch():
         from azure.mgmt.consumption import ConsumptionManagementClient
-        client = ConsumptionManagementClient(_get_credential(), AZURE_SUBSCRIPTION_ID)
-        scope  = f"/subscriptions/{AZURE_SUBSCRIPTION_ID}"
+        _sub = os.getenv("AZURE_SUBSCRIPTION_ID", "")
+        client = ConsumptionManagementClient(_get_credential(), _sub)
+        scope  = f"/subscriptions/{_sub}"
         return list(client.budgets.list(scope))
 
     loop = asyncio.get_event_loop()

@@ -37,30 +37,57 @@ def _get_credential():
     if _credential is None:
         from azure.identity import ClientSecretCredential
         _credential = ClientSecretCredential(
-            tenant_id=AZURE_TENANT_ID,
-            client_id=AZURE_CLIENT_ID,
-            client_secret=AZURE_CLIENT_SECRET,
+            tenant_id=os.getenv("AZURE_TENANT_ID", ""),
+            client_id=os.getenv("AZURE_CLIENT_ID", ""),
+            client_secret=os.getenv("AZURE_CLIENT_SECRET", ""),
         )
     return _credential
 
 
 def _graph_query(kql: str) -> list[dict]:
-    """Run a KQL query against Azure Resource Graph. Returns list of row dicts."""
-    from azure.mgmt.resourcegraph import ResourceGraphClient
-    from azure.mgmt.resourcegraph.models import QueryRequest
-    client = ResourceGraphClient(_get_credential())
-    request = QueryRequest(
-        subscriptions=[AZURE_SUBSCRIPTION_ID],
-        query=kql,
+    import requests
+
+    sub_id = os.getenv("AZURE_SUBSCRIPTION_ID", "")
+    if not sub_id:
+        raise ValueError("AZURE_SUBSCRIPTION_ID is not set")
+
+    # Get token directly from credential
+    token = _get_credential().get_token("https://management.azure.com/.default").token
+    token = _get_credential().get_token("https://management.azure.com/.default").token
+    import json, base64
+    # Decode JWT payload (middle part)
+    payload = token.split('.')[1]
+    payload += '=' * (4 - len(payload) % 4)  # fix padding
+    decoded = json.loads(base64.b64decode(payload))
+    print(f"DEBUG token sub: {decoded.get('sub')}")
+    print(f"DEBUG token oid: {decoded.get('oid')}")
+    print(f"DEBUG token roles: {decoded.get('roles')}")
+    print(f"DEBUG token scp: {decoded.get('scp')}")
+    print(f"DEBUG token tid: {decoded.get('tid')}")
+    resp = requests.post(
+        "https://management.azure.com/providers/Microsoft.ResourceGraph/resources?api-version=2021-03-01",
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+        },
+        json={
+            "subscriptions": [sub_id],
+            "query": kql,
+        },
+        timeout=30,
     )
-    result = client.resources(request)
-    columns = [c.name for c in result.columns] if result.columns else []
-    rows = []
-    for row in (result.rows or []):
-        rows.append(dict(zip(columns, row)))
-    return rows
+    data = resp.json()
+    print(f"DEBUG raw response: {data}")
 
+    # REST API returns {data: [...]} not {columns, rows}
+    rows_data = data.get("data", [])
+    if rows_data and isinstance(rows_data[0], dict):
+        # Already in dict format — return directly
+        return rows_data
 
+    # Fallback for column/row format
+    columns = [c["name"] for c in data.get("columns", [])]
+    return [dict(zip(columns, row)) for row in data.get("rows", [])]
 # ── Public API ─────────────────────────────────────────────────────────────────
 
 async def get_resource_inventory() -> dict[str, Any]:
@@ -260,7 +287,7 @@ async def _real_recently_modified_resources(hours: int) -> dict[str, Any]:
 
     def _fetch():
         from azure.mgmt.monitor import MonitorManagementClient
-        client = MonitorManagementClient(_get_credential(), AZURE_SUBSCRIPTION_ID)
+        client = MonitorManagementClient(_get_credential(), os.getenv("AZURE_SUBSCRIPTION_ID", ""))
         events = list(client.activity_logs.list(
             filter=filter_str,
             select="eventTimestamp,operationName,resourceGroupName,resourceType,resourceId,caller,httpRequest",

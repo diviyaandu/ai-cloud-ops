@@ -11,6 +11,7 @@ from typing import Any
 
 from groq import Groq
 from mcp_server.client import mcp_call
+import state.store as store
 
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
 _client: Groq | None = None
@@ -75,6 +76,7 @@ async def run(user_message: str, history: list[dict] | None = None) -> dict[str,
             temperature=0.2,
             max_tokens=600,
         )
+        store.increment_groq_calls()
         return response.choices[0].message.content
 
     answer = await loop.run_in_executor(None, _call)

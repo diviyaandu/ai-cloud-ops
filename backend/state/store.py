@@ -18,3 +18,8 @@ last_analysis_snapshot: dict  = {}
 
 # ── Telemetry ──────────────────────────────────────────────
 groq_call_count: int = 0
+
+def increment_groq_calls() -> int:
+    global groq_call_count
+    groq_call_count += 1
+    return groq_call_count

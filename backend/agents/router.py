@@ -17,6 +17,7 @@ import os
 from typing import Literal
 
 from groq import Groq
+import state.store as store
 
 AgentType = Literal["operational", "security", "finops", "general"]
 
@@ -34,21 +35,28 @@ def _groq() -> Groq:
 SYSTEM_PROMPT = """You are a routing agent for a cloud operations AI system.
 Your ONLY job is to classify the user's message into exactly one of these categories:
 
-  operational  — questions about system metrics, CPU, memory, disk, network,
-                 HTTP errors, Prometheus data, uptime, performance, node health
+  operational  — questions about cloud resource health, infrastructure state,
+                 what is running, resource status, VM state, service health,
+                 uptime, performance, node health, is something up/down,
+                 "what's the health of my infrastructure", "what's running",
+                 "are my services healthy", "what resources are currently running",
+                 "what's deployed", "show me my resources", "list my resources",
+                 "what do I have running", "what resources do I have"
 
   security     — questions about open ports, SSH failures, suspicious processes,
                  security audits, vulnerabilities, access control, login attempts
 
   finops       — questions about Azure costs, spend, budgets, billing,
-                 cost anomalies, resource inventory, Azure resources, resource groups,
-                 unhealthy Azure resources, untagged resources, resource graph,
-                 "show me my resources", "what resources do I have", "what's deployed"
+                 cost anomalies, untagged resources, cost by resource group,
+                 "how much am I spending", "what's my Azure bill", "show me costs"
 
   general      — greetings, off-topic, or anything that doesn't fit above
 
-Key rule: any question about Azure resources, cloud inventory, or what is deployed
-in Azure → always classify as "finops", even if the word "cost" is not used.
+Key rules:
+  - resource health / status / running state → operational
+  - cost / spend / billing / budget → finops
+  - security / ports / SSH / audit → security
+  - When in doubt between operational and finops, prefer operational
 
 Respond with ONLY a JSON object, no explanation:
 {"intent": "<category>", "confidence": <0.0-1.0>, "reasoning": "<one sentence>"}
@@ -78,6 +86,7 @@ async def classify_intent(user_message: str) -> dict:
             temperature=0.1,
             max_tokens=128,
         )
+        store.increment_groq_calls()
         return response.choices[0].message.content
 
     raw = await loop.run_in_executor(None, _call)

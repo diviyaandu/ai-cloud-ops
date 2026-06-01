@@ -1,51 +1,54 @@
 import time
+import json
 
 import state.store as store
-from config.settings import ANALYSIS_COOLDOWN
-from services.metrics import get_system_metrics, build_metrics_summary, metrics_changed_significantly
 from services.groq_client import call_groq
+from tools.azure_resource_graph import get_resource_inventory, get_unhealthy_resources
 
-_SYSTEM = "You are an expert Site Reliability Engineer. Be concise and operational."
+ANALYSIS_COOLDOWN = 60  # seconds
+
+_SYSTEM = "You are an expert Azure Cloud Operations engineer. Be concise and actionable."
 
 _PROMPT_TEMPLATE = """\
-Current system state:
+Current Azure resource inventory:
 {summary}
 
-Provide a concise operational report:
-1. Overall system status (one sentence)
-2. Primary concern (if any)
+Provide a concise cloud operations report:
+1. Overall infrastructure status (one sentence)
+2. Primary concern or risk (if any)
 3. Recommended action
-Be direct and metric-specific.\
+Be direct and specific to the resources shown.\
 """
 
 
 async def get_analysis(force: bool = False) -> dict:
-    """
-    Returns cached analysis when possible.
-    Calls Groq only when force=True, or cooldown elapsed AND metrics shifted.
-    """
-    data = await get_system_metrics()
-    now  = time.monotonic()
-
+    now = time.monotonic()
     cooldown_ok = (now - store.last_analysis_time) >= ANALYSIS_COOLDOWN
-    changed     = metrics_changed_significantly(data)
-    should_call = force or (cooldown_ok and changed)
+    should_call = force or cooldown_ok
 
     if should_call:
-        summary = build_metrics_summary(data)
+        try:
+            inventory = await get_resource_inventory()
+            unhealthy = await get_unhealthy_resources()
+        except Exception as e:
+            inventory = {"error": str(e)}
+            unhealthy = {}
+
+        summary = json.dumps({
+            "inventory": inventory,
+            "unhealthy": unhealthy,
+        }, indent=2)
+
         store.last_analysis = call_groq(
             system=_SYSTEM,
             messages=[{"role": "user", "content": _PROMPT_TEMPLATE.format(summary=summary)}],
             max_tokens=220,
             temperature=0.3,
         )
-        store.last_analysis_time     = now
-        store.last_analysis_snapshot = {k: data[k] for k in ("cpu", "memory", "disk")}
+        store.last_analysis_time = now
 
     return {
-        **data,
-        "analysis":             store.last_analysis or "Click 'Analyze' to generate AI analysis.",
-        "analysis_fresh":       should_call,
-        "groq_calls_total":     store.groq_call_count,
-        "next_auto_in_seconds": max(0, int(ANALYSIS_COOLDOWN - (now - store.last_analysis_time))),
+        "analysis": store.last_analysis or "Click ▶ ANALYZE to run cloud infrastructure analysis.",
+        "analysis_fresh": should_call,
+        "groq_calls_total": store.groq_call_count,
     }

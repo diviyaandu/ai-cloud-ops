@@ -3,9 +3,7 @@
 import { useState } from "react";
 import { fetchAnalysis } from "../../services/api";
 
-type Props = { onGroqCall: (total: number) => void };
-
-export default function AnalysisPanel({ onGroqCall }: Props) {
+export default function AnalysisPanel() {
   const [analysis, setAnalysis] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -15,7 +13,6 @@ export default function AnalysisPanel({ onGroqCall }: Props) {
     try {
       const data = await fetchAnalysis();
       setAnalysis(data.analysis);
-      onGroqCall(data.groq_calls_total);
     } catch {
       setAnalysis("Failed to reach backend.");
     }

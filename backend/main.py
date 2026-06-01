@@ -2,15 +2,15 @@ import logging
 
 from fastapi import FastAPI
 
-from core.lifespan    import lifespan
-from core.middleware  import register_middleware
-#from routes           import metrics_router, analysis_router, chat_router
-from routes.metrics import router as metrics_router
+from core.lifespan   import lifespan
+from core.middleware import register_middleware
+from routes.metrics  import router as metrics_router
 from routes.analysis import router as analysis_router
-from routes.chat import router as chat_router
+from routes.chat     import router as chat_router
+from api.agent       import router as agent_router
+from routes.cloud_resources import router as cloud_resources_router
 
-# ← ADD: new multi-agent router
-from api.agent import router as agent_router
+import state.store as store
 
 logging.basicConfig(level=logging.INFO)
 
@@ -21,6 +21,8 @@ register_middleware(app)
 app.include_router(metrics_router)
 app.include_router(analysis_router)
 app.include_router(chat_router)
+app.include_router(agent_router)
+app.include_router(cloud_resources_router)
 
 
 @app.get("/")
@@ -32,12 +34,7 @@ def home():
 def health():
     return {"status": "healthy"}
 
-# ← ADD: agent route
-app.include_router(agent_router) 
-@app.get("/")
-@app.get("/health")
-async def health():
-    return {"status": "ok"}
 
-from routes.cloud_resources import router as cloud_resources_router
-app.include_router(cloud_resources_router)
+@app.get("/stats")
+def stats():
+    return {"groq_call_count": store.groq_call_count}

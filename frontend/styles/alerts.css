@@ -1,0 +1,4 @@
+/* ── Alert items ─────────────────────────────────────────────────────────── */
+.alert-item { display: flex; align-items: flex-start; gap: 9px; padding: 9px 12px; border-radius: 6px; border: 1px solid; margin-bottom: 7px; font-size: 11px; line-height: 1.5; }
+.alert-dot  { width: 5px; height: 5px; border-radius: 50%; margin-top: 3px; flex-shrink: 0; }
+.alert-none { color: var(--green); font-size: 11px; display: flex; align-items: center; gap: 7px; }

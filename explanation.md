@@ -1,3 +1,59 @@
+Here's the full flow from user input to displayed answer:
+
+---
+
+**1. User types a message** in the AI Copilot panel and hits send.
+
+**2. `AgentPanel` (frontend)** packages the message + conversation history into a JSON body and POSTs to `http://127.0.0.1:8000/agent`.
+
+**3. `api/agent.py`** receives the request. If `force_agent` was set, it prepends a routing hint to the message (e.g. "Run a security audit. " + original message). Then calls `run_agent(message, history)` from `agents/graph.py`.
+
+**4. `agents/graph.py`** creates the initial `AgentState` — a TypedDict holding the message, history, intent, and placeholders for the response. It passes this into the compiled LangGraph graph, which starts at the `route` node.
+
+**5. `route_node` → `agents/router.py`** makes **Groq call #1** (`temperature=0.1`, `max_tokens=128`). The system prompt lists the 4 intent categories with examples. The model returns a JSON object like `{"intent": "operational", "confidence": 0.97, "reasoning": "..."}`. The router strips any markdown fences, parses the JSON, validates the intent value, increments the Groq call counter in `state/store.py`, and writes intent + confidence + reasoning back into `AgentState`.
+
+**6. `route_to_agent()`** reads `state["intent"]` and returns the name of the next node. LangGraph's conditional edge dispatches to one of: `operational_agent`, `security_agent`, `finops_agent`, or `general_agent`.
+
+**7. The specialist agent node runs.** Using operational as the example:
+
+- `operational_node` calls `operational.run(message, history)`
+- It calls `mcp_call("get_all_metrics")` — an HTTP request to the MCP server on port 8001
+- The MCP server executes `tools/prometheus.py` against Prometheus and returns live metrics JSON
+- The agent builds a prompt: system prompt (SRE persona) + last 6 history turns + the metrics JSON + the user's question
+- **Groq call #2** (`temperature=0.3`, `max_tokens=512`) generates a natural language answer
+- Groq call counter incremented again in `store.py`
+- Returns `{agent, agent_label, answer, metrics_snapshot, overall_status}`
+
+For **security**: same pattern but `mcp_call("run_full_audit")` → `tools/security_checks.py` (psutil, local system).
+For **finops**: `mcp_call("get_full_cost_report")` + `mcp_call("get_full_resource_report")` → Azure Cost Management + Resource Graph.
+For **general**: no tool call, just a direct Groq call inside `general_node` itself.
+
+**8. The agent writes** `agent_response` and `final_answer` into `AgentState` and the node exits to `END`.
+
+**9. `run_agent()` in `graph.py`** extracts the final state and returns a flat dict: `answer`, `agent`, `agent_label`, `intent`, `intent_confidence`, `intent_reasoning`, `overall_status`, `data`.
+
+**10. `api/agent.py`** wraps this in `AgentResponse` (Pydantic model) and returns it as JSON with HTTP 200.
+
+**11. `AgentPanel` (frontend)** receives the response, appends the assistant message to the conversation history with the `agent_label` shown as a badge, and renders the answer text.
+
+---
+
+**Where things live:**
+
+| Concern              | Location                                                                                                  |
+| -------------------- | --------------------------------------------------------------------------------------------------------- |
+| Conversation history | Frontend React state in `AgentPanel` — sent on every request, never stored server-side                    |
+| Groq call count      | `state/store.py` — in-memory global, reset on server restart                                              |
+| Analysis cache       | `state/store.py` — used by `/analyze` route, not the agent                                                |
+| Prompt construction  | `agents/router.py` (routing prompt), each specialist agent file (task prompt)                             |
+| LLM calls            | Router: `router.py`. Specialists: `operational.py`, `security.py`, `finops.py`, `graph.py` (general node) |
+| Tool calls           | MCP server on port 8001 via `mcp_server/client.py` → `tools/`                                             |
+| Error handling       | `mcp_call()` try/catch in each agent; HTTP 500 in `api/agent.py`; JSON parse fallback in `router.py`      |
+
+**Frontend-only:** `AgentPanel`, message rendering, history state, the POST call itself.
+**Backend-only:** `graph.py`, `router.py`, all agent files, `store.py`, MCP server, all `tools/` modules.
+**Bridge:** `api/agent.py` — the single HTTP boundary between them.
+
 # AI Cloud Ops — Full Workflow & Handoff
 
 ## What This Is
@@ -119,7 +175,7 @@ page.tsx (app shell)
 
 ## Azure Setup
 
-- **Subscription:** `d91323a4-7619-4450-8e88-c17d3cd3df5e`
+- **Subscription:** `SUB-KEY`
 - **Resource Group:** `rg-finops-prod`
 - **Auth:** Service Principal with Reader role (env vars: `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`)
 - **Known resources:** 2× Cognitive Services (eastus, eastus2), 1× Storage Account (eastus)
@@ -168,6 +224,3 @@ npm run dev
 3. Add `CognitiveServices` as top-level key in `/cloud-resources` response (backend already supports it via `RESOURCE_TYPE_MAP`)
 4. Log Analytics / App Insights integration
 5. Deploy backend + frontend to Azure (App Service or Container Apps)
-
-Next step:
-Implement three enhancements across the existing codebase: \*\*(1) integrate Terraform as the Infrastructure-as-Code layer for Azure resource provisioning, with a structure that supports future AI-generated Terraform workflows and allows correlation between Terraform-managed and discovered resources; (2) introduce a standardized Azure tagging strategy (Project, Environment, Owner, Application) and ensure tags are included in resource discovery, normalized in backend responses, and automatically applied to Terraform-created resources; and (3) add frontend resource filtering based on these tags, including dynamic filter values, multi-filter support, active filter display, clear-filter functionality, and any required backend API support for tag-based filtering. Preserve all existing functionality and follow the current project architecture and coding patterns.

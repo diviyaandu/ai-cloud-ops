@@ -150,6 +150,7 @@ async def _real_resource_inventory() -> dict[str, Any]:
 
     kql = """
         Resources
+        | project type, location, tags
         | summarize count() by type, location
         | order by count_ desc
     """
@@ -342,11 +343,11 @@ async def _real_recently_modified_resources(hours: int) -> dict[str, Any]:
 async def _real_untagged_resources() -> dict[str, Any]:
     import asyncio
 
-    required_tags = ["owner", "env", "cost-center"]
-
+    required_tags = ["Project", "Environment", "Owner", "Application"]
     kql = """
         Resources
-        | where isnull(tags.owner) or isnull(tags.env) or isnull(tags['cost-center'])
+        | where isnull(tags.Project) or isnull(tags.Environment)
+            or isnull(tags.Owner) or isnull(tags.Application)
         | project name, type, resourceGroup, tags
         | limit 50
     """
@@ -376,6 +377,59 @@ async def _real_untagged_resources() -> dict[str, Any]:
         "mode":           "live",
     }
 
+#TERRAFORM AND TAG-BASED FILTERING FUNCTIONS WOULD GO HERE (e.g., get_resources_by_tags, get_tag_values)
+
+STANDARD_TAGS = ["Project", "Environment", "Owner", "Application"]
+
+async def get_tag_values() -> dict:
+    import asyncio
+    kql = """
+        Resources
+        | project tags
+        | mv-expand tags
+        | where isnotempty(tags)
+        | summarize values=make_set(tostring(tags)) by key=tostring(bag_keys(tags)[0])
+        | where key in ('Project','Environment','Owner','Application')
+    """
+    # Simpler fallback — get all tags and extract distinct values per key
+    kql2 = """
+        Resources
+        | project tags
+        | where isnotnull(tags)
+    """
+    loop = asyncio.get_event_loop()
+    rows = await loop.run_in_executor(None, _graph_query, kql2)
+    result: dict[str, set] = {t: set() for t in STANDARD_TAGS}
+    for row in rows:
+        tags = row.get("tags") or {}
+        for key in STANDARD_TAGS:
+            if key in tags and tags[key]:
+                result[key].add(tags[key])
+    return {k: sorted(v) for k, v in result.items()}
+
+
+async def get_resources_by_tags(filters: dict[str, str]) -> dict:
+    import asyncio
+    if not filters:
+        return await get_resource_inventory()
+    conditions = " and ".join(
+        f"tags['{k}'] == '{v}'" for k, v in filters.items()
+    )
+    kql = f"""
+        Resources
+        | where {conditions}
+        | project name, type, resourceGroup, location, tags,
+                  state = tostring(properties.provisioningState)
+        | order by type asc
+    """
+    loop = asyncio.get_event_loop()
+    rows = await loop.run_in_executor(None, _graph_query, kql)
+    return {
+        "filtered": True,
+        "filters_applied": filters,
+        "total": len(rows),
+        "resources": rows,
+    }
 
 # ── Mock implementations (kept for USE_REAL_AZURE = False) ────────────────────
 

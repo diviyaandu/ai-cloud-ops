@@ -36,3 +36,41 @@ export function useCloudResources() {
 
   return { data, loading, error };
 }
+
+// Add after the existing hook:
+export function useTagValues() {
+  const [tags, setTags] = useState<Record<string, string[]>>({});
+  useEffect(() => {
+    fetch(`${BASE}/cloud-resources/tags`)
+      .then((r) => r.json())
+      .then(setTags)
+      .catch(() => {});
+  }, []);
+  return tags;
+}
+
+export function useFilteredResources(filters: Record<string, string>) {
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+  const activeFilters = Object.entries(filters).filter(([, v]) => v);
+
+  useEffect(() => {
+    if (activeFilters.length === 0) {
+      setData(null);
+      return;
+    }
+    setLoading(true);
+    const params = new URLSearchParams(
+      activeFilters.map(([k, v]) => [k.toLowerCase(), v]),
+    );
+    fetch(`${BASE}/cloud-resources/filter?${params}`)
+      .then((r) => r.json())
+      .then((d) => {
+        setData(d);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+  }, [JSON.stringify(filters)]);
+
+  return { data, loading };
+}

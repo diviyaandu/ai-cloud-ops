@@ -1,0 +1,53 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,500;0,700;1,400&family=Syne:wght@600;700;800&display=swap');
+
+/* ── Reset ───────────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+button { font-family: inherit; cursor: pointer; }
+
+/* ── Design tokens ───────────────────────────────────────────────────────── */
+:root {
+  --bg-root:    #070a0e;
+  --bg-panel:   #0b1018;
+  --bg-raised:  #0f1520;
+  --bg-hover:   #141c26;
+  --border:     #141c26;
+  --border-mid: #1e2a38;
+  --fg:         #d4dde8;
+  --fg-mid:     #7a8fa6;
+  --fg-dim:     #3d5066;
+  --muted:      #2d3d52;
+  --accent:     #2dd4bf;
+  --green:      #34d399;
+  --yellow:     #facc15;
+  --red:        #f87171;
+  --blue:       #60a5fa;
+  --purple:     #a78bfa;
+  --orange:     #fb923c;
+
+  --sidebar-w:  200px;
+  --header-h:   52px;
+  --font-mono:  'JetBrains Mono', monospace;
+  --font-disp:  'Syne', sans-serif;
+  --radius-sm:  6px;
+  --radius-md:  9px;
+}
+
+/* ── Base ────────────────────────────────────────────────────────────────── */
+body {
+  background: var(--bg-root);
+  color: var(--fg-mid);
+  font-family: var(--font-mono);
+  min-height: 100vh;
+  background-image: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(255,255,255,0.009) 2px,
+    rgba(255,255,255,0.009) 4px
+  );
+}
+
+/* ── Scrollbar global ────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 3px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }

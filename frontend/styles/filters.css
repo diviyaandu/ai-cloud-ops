@@ -1,0 +1,28 @@
+/* ── Tag filter bar ──────────────────────────────────────────────────────── */
+.tag-filter-bar {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 10px 0;
+  margin-bottom: 12px;
+}
+.tag-select {
+  background: var(--bg-raised);
+  border: 1px solid var(--border-mid);
+  color: var(--fg-mid);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 5px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.tag-select:focus { outline: 1px solid var(--accent); }
+.tag-clear {
+  background: transparent;
+  border: 1px solid var(--red);
+  color: var(--red);
+  font-size: 11px;
+  padding: 5px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}

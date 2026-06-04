@@ -1,0 +1,98 @@
+/* ── Section label ───────────────────────────────────────────────────────── */
+.section-lbl {
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.section-lbl::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+/* ── Panel ───────────────────────────────────────────────────────────────── */
+.panel {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  position: relative;
+  overflow: hidden;
+}
+.panel::before {
+  content: '';
+  position: absolute; top: 0; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(45,212,191,0.12), transparent);
+  pointer-events: none;
+}
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(255,255,255,0.01);
+}
+.panel-title {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+}
+.panel-body { padding: 16px; }
+
+/* ── Content grid (chart + alerts side-by-side) ──────────────────────────── */
+.content-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: 12px;
+  margin-bottom: 24px;
+}
+@media (max-width: 1000px) { .content-grid { grid-template-columns: 1fr; } }
+.left-col  { display: flex; flex-direction: column; gap: 12px; }
+.right-col { display: flex; flex-direction: column; gap: 12px; }
+
+/* ── Filter results row ──────────────────────────────────────────────────── */
+.filter-results {
+  font-size: 10px;
+  color: var(--fg-dim);
+  margin-bottom: 12px;
+}
+
+/* ── Empty state ─────────────────────────────────────────────────────────── */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 40px 20px;
+  color: var(--border-mid);
+  text-align: center;
+}
+.empty-state-icon { font-size: 22px; opacity: 0.4; }
+.empty-state-text { font-size: 11px; color: var(--muted); }
+.empty-state-sub  { font-size: 9px; color: var(--fg-dim); margin-top: 2px; }
+
+/* ── Recharts overrides ──────────────────────────────────────────────────── */
+.recharts-cartesian-axis-tick-value {
+  font-size: 9px !important;
+  fill: var(--muted) !important;
+  font-family: var(--font-mono) !important;
+}
+.recharts-legend-item-text { font-size: 9px !important; color: var(--muted) !important; }
+.recharts-cartesian-grid line { stroke: #0f1922 !important; }
+.recharts-tooltip-wrapper .chart-tooltip {
+  background: var(--bg-raised) !important;
+  border: 1px solid var(--border-mid) !important;
+  border-radius: var(--radius-md) !important;
+  padding: 9px 13px !important;
+  font-size: 10px !important;
+}

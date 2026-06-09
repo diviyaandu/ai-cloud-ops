@@ -1,0 +1,61 @@
+/* ── Insight card grid ───────────────────────────────────────────────────── */
+.ic-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 10px;
+  margin-bottom: 24px;
+}
+@media (max-width: 1280px) { .ic-grid { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 800px)  { .ic-grid { grid-template-columns: repeat(2, 1fr); } }
+
+/* ── Insight card ────────────────────────────────────────────────────────── */
+.ic {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 14px 15px 11px;
+  position: relative;
+  overflow: hidden;
+  transition: border-color 0.2s, transform 0.15s;
+  animation: fadeUp 0.4s ease both;
+}
+.ic::before {
+  content: "";
+  position: absolute; top: 0; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--ic-accent, #2dd4bf) 40%, transparent);
+  opacity: 0.4;
+}
+.ic:hover { border-color: var(--border-mid); transform: translateY(-1px); }
+
+.ic-top {
+  display: flex; align-items: center;
+  justify-content: space-between; margin-bottom: 10px;
+}
+.ic-icon { font-size: 12px; color: var(--ic-accent, #2dd4bf); }
+.ic-badge {
+  font-size: 7.5px; font-weight: 700; letter-spacing: 0.08em;
+  padding: 2px 7px; border-radius: 100px; border: 1px solid;
+  text-transform: uppercase;
+}
+.ic-value {
+  font-family: var(--font-disp);
+  font-size: 28px; font-weight: 800;
+  color: var(--fg); letter-spacing: -0.5px;
+  line-height: 1; margin-bottom: 8px;
+  min-height: 30px; display: flex; align-items: center;
+}
+.ic-label {
+  font-size: 9.5px; font-weight: 700;
+  color: var(--fg-mid); letter-spacing: 0.04em; margin-bottom: 2px;
+}
+.ic-sub {
+  font-size: 8px; color: var(--fg-dim);
+  letter-spacing: 0.04em; margin-bottom: 10px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.ic-bar { height: 2px; background: var(--border); border-radius: 1px; overflow: hidden; }
+.ic-bar-fill {
+  display: block; height: 100%; width: 35%;
+  background: var(--ic-accent, #2dd4bf);
+  border-radius: 1px; opacity: 0.5;
+}

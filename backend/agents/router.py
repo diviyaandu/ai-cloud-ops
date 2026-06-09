@@ -5,10 +5,10 @@ Routing Agent — classifies user intent and dispatches to the correct sub-agent
 Runs as the entry node in the LangGraph graph.
 
 Intent classes:
-  - "operational"  → CPU, memory, disk, HTTP errors, Prometheus metrics
-  - "security"     → ports, SSH failures, suspicious processes, audit
-  - "finops"       → Azure costs, budgets, spend, billing, resource inventory,
-                     unhealthy resources, untagged resources, resource graph
+  - "operational"  → Azure resource health, inventory, logs, errors, uptime
+  - "security"     → governance, untagged resources, recent changes, audit,
+                     access control, vulnerabilities, who changed what
+  - "finops"       → Azure costs, budgets, spend, billing, cost anomalies
   - "general"      → catch-all, answered directly without a sub-agent
 """
 
@@ -37,26 +37,38 @@ Your ONLY job is to classify the user's message into exactly one of these catego
 
   operational  — questions about cloud resource health, infrastructure state,
                  what is running, resource status, VM state, service health,
-                 uptime, performance, node health, is something up/down,
+                 uptime, performance, node health, errors, failed operations,
+                 Azure logs, application errors, warnings, activity log,
                  "what's the health of my infrastructure", "what's running",
                  "are my services healthy", "what resources are currently running",
                  "what's deployed", "show me my resources", "list my resources",
+                 "are there any errors in my logs", "any failed operations",
                  "what do I have running", "what resources do I have"
 
-  security     — questions about open ports, SSH failures, suspicious processes,
-                 security audits, vulnerabilities, access control, login attempts
+  security     — questions about governance, compliance, resource hygiene,
+                 untagged resources, missing tags, recently modified resources,
+                 who changed what, change history, suspicious changes,
+                 access control, RBAC, login attempts, open ports,
+                 security audit, vulnerabilities, exposed resources,
+                 "are there untagged resources", "what changed recently",
+                 "who modified my resources", "any governance issues",
+                 "are my resources compliant", "run a security audit",
+                 "any security risks", "what resources are ungoverned"
 
   finops       — questions about Azure costs, spend, budgets, billing,
-                 cost anomalies, untagged resources, cost by resource group,
-                 "how much am I spending", "what's my Azure bill", "show me costs"
+                 cost anomalies, cost by resource group, forecasts,
+                 "how much am I spending", "what's my Azure bill",
+                 "show me costs", "am I over budget", "cost breakdown"
 
   general      — greetings, off-topic, or anything that doesn't fit above
 
 Key rules:
-  - resource health / status / running state → operational
-  - cost / spend / billing / budget → finops
-  - security / ports / SSH / audit → security
-  - When in doubt between operational and finops, prefer operational
+  - resource health / status / errors / logs → operational
+  - cost / spend / billing / budget / forecast → finops
+  - untagged / governance / who changed / compliance / audit / RBAC → security
+  - When in doubt between operational and security, check: does it involve
+    WHO did something or compliance? → security. Does it involve WHAT is
+    running or broken? → operational
 
 Respond with ONLY a JSON object, no explanation:
 {"intent": "<category>", "confidence": <0.0-1.0>, "reasoning": "<one sentence>"}

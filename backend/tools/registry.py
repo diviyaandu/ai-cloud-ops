@@ -6,25 +6,6 @@ Each agent imports from here rather than directly from tool modules.
 Keeps the tool surface explicit and testable.
 """
 
-from tools.prometheus import (
-    get_cpu_usage,
-    get_memory_usage,
-    get_disk_usage,
-    get_http_error_rate,
-    get_network_io,
-    get_system_load,
-    get_all_metrics,
-)
-
-from tools.security_checks import (
-    check_open_ports,
-    check_failed_ssh_logins,
-    check_suspicious_processes,
-    check_root_equivalent_users,
-    check_world_writable_files,
-    run_full_audit,
-)
-
 from tools.azure_cost import (
     get_monthly_spend,
     get_daily_spend,
@@ -43,37 +24,48 @@ from tools.azure_resource_graph import (
     get_full_resource_report,
 )
 
-# Tool registry: maps tool name (used in LangGraph) → callable
+from tools.azure_log_analytics import (
+    get_recent_errors,
+    get_recent_warnings,
+    get_resource_health_logs,
+    get_top_operations,
+    get_failed_operations,
+    get_log_summary,
+)
+from tools.azure_advisor import (
+    get_advisor_recommendations,
+    get_advisor_cost_recommendations,
+    get_advisor_security_recommendations,
+    get_advisor_reliability_recommendations,
+    get_advisor_summary,
+)
+
 TOOL_REGISTRY: dict = {
-    # Operational / Prometheus
-    "get_cpu_usage":        get_cpu_usage,
-    "get_memory_usage":     get_memory_usage,
-    "get_disk_usage":       get_disk_usage,
-    "get_http_error_rate":  get_http_error_rate,
-    "get_network_io":       get_network_io,
-    "get_system_load":      get_system_load,
-    "get_all_metrics":      get_all_metrics,
-    # Security
-    "check_open_ports":              check_open_ports,
-    "check_failed_ssh_logins":       check_failed_ssh_logins,
-    "check_suspicious_processes":    check_suspicious_processes,
-    "check_root_equivalent_users":   check_root_equivalent_users,
-    "check_world_writable_files":    check_world_writable_files,
-    "run_full_audit":                run_full_audit,
     # FinOps — Cost Management
-    "get_monthly_spend":             get_monthly_spend,
-    "get_daily_spend":               get_daily_spend,
-    "get_cost_by_resource_group":    get_cost_by_resource_group,
-    "get_budget_status":             get_budget_status,
-    "get_cost_anomalies":            get_cost_anomalies,
-    "get_full_cost_report":          get_full_cost_report,
-    # FinOps — Resource Graph
+    "get_monthly_spend":            get_monthly_spend,
+    "get_daily_spend":              get_daily_spend,
+    "get_cost_by_resource_group":   get_cost_by_resource_group,
+    "get_budget_status":            get_budget_status,
+    "get_cost_anomalies":           get_cost_anomalies,
+    "get_full_cost_report":         get_full_cost_report,
+    # Azure Resource Graph
     "get_resource_inventory":           get_resource_inventory,
     "get_unhealthy_resources":          get_unhealthy_resources,
     "get_resource_group_summary":       get_resource_group_summary,
     "get_recently_modified_resources":  get_recently_modified_resources,
     "get_untagged_resources":           get_untagged_resources,
     "get_full_resource_report":         get_full_resource_report,
+    "get_recent_errors":        get_recent_errors,
+    "get_recent_warnings":      get_recent_warnings,
+    "get_resource_health_logs": get_resource_health_logs,
+    "get_top_operations":       get_top_operations,
+    "get_failed_operations":    get_failed_operations,
+    "get_log_summary":          get_log_summary,
+    "get_advisor_recommendations":          get_advisor_recommendations,
+    "get_advisor_cost_recommendations":     get_advisor_cost_recommendations,
+    "get_advisor_security_recommendations": get_advisor_security_recommendations,
+    "get_advisor_reliability_recommendations": get_advisor_reliability_recommendations,
+    "get_advisor_summary":                  get_advisor_summary,
 }
 
 

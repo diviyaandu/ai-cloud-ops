@@ -59,11 +59,13 @@ async def run(user_message: str, history: list[dict] | None = None) -> dict[str,
     import asyncio
 
     # 1. Fetch cost data and resource graph data in parallel
-    cost_report_result, resource_report_result = await asyncio.gather(
+    cost_report_result, resource_report_result, advisor_result = await asyncio.gather(
         mcp_call("get_full_cost_report"),
         mcp_call("get_full_resource_report"),
+        mcp_call("get_advisor_cost_recommendations"),
         return_exceptions=True,
     )
+    advisor = advisor_result if not isinstance(advisor_result, Exception) else {"error": str(advisor_result)}
 
     cost_report = cost_report_result if not isinstance(cost_report_result, Exception) \
         else {"error": str(cost_report_result), "mode": "error"}
@@ -111,7 +113,12 @@ async def run(user_message: str, history: list[dict] | None = None) -> dict[str,
         "content": (
             f"AZURE COST REPORT {mode_note}:\n```json\n{cost_summary}\n```\n\n"
             f"AZURE RESOURCE REPORT:\n```json\n{resource_summary}\n```\n\n"
-            f"USER QUESTION: {user_message}"
+            f"AZURE ADVISOR COST RECOMMENDATIONS:\n```json\n{json.dumps({
+                'total': advisor.get('total', 0),
+                'potential_savings_usd': advisor.get('total_potential_savings_usd', 0),
+                'top': advisor.get('recommendations', [])[:5],
+            }, indent=2)}\n```\n\n"
+            f"USER QUESTION:\n{user_message}"
         ),
     })
 

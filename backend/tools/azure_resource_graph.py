@@ -187,6 +187,17 @@ async def _real_unhealthy_resources() -> dict[str, Any]:
 
     kql = """
         Resources
+        | where type !in (
+            'microsoft.compute/sshpublickeys',
+            'microsoft.managedidentity/userassignedidentities',
+            'microsoft.insights/actiongroups',
+            'microsoft.insights/components',
+            'microsoft.network/privatednszones',
+            'microsoft.network/privatednszones/virtualnetworklinks',
+            'microsoft.authorization/roleassignments',
+            'microsoft.keyvault/vaults'
+          )
+        | where isnotempty(tostring(properties.provisioningState))
         | where properties.provisioningState != 'Succeeded'
               or properties.powerState.code == 'PowerState/deallocated'
         | project name, type, resourceGroup, location,

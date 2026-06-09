@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import type { CloudResources } from "@/types/cloud";
 
 const BASE = "http://127.0.0.1:8000";
-const POLL_INTERVAL_MS = 30_000; // cloud inventory — poll every 30s not 3s
+const POLL_INTERVAL_MS = 30_000;
+const SUMMARY_POLL_MS = 60_000; // summary is heavier — poll every 60s
 
 export function useCloudResources() {
   const [data, setData] = useState<CloudResources | null>(null);
@@ -28,7 +29,6 @@ export function useCloudResources() {
           setLoading(false);
         });
     };
-
     poll();
     const id = setInterval(poll, POLL_INTERVAL_MS);
     return () => clearInterval(id);
@@ -37,7 +37,68 @@ export function useCloudResources() {
   return { data, loading, error };
 }
 
-// Add after the existing hook:
+export type CloudSummary = {
+  spend: {
+    spent_usd: number | null;
+    budget_usd: number | null;
+    forecast_eom_usd: number | null;
+    percent_used: number | null;
+    status: string;
+  };
+  health: {
+    unhealthy_total: number;
+    critical: number;
+    warning: number;
+    status: string;
+    resources: any[];
+  };
+  security: {
+    untagged_total: number;
+    recent_changes: number;
+    status: string;
+  };
+  logs: {
+    errors_24h: number;
+    failed_ops_24h: number;
+    status: string;
+  };
+  advisor: {
+    total: number;
+    potential_savings: number;
+    status: string;
+  };
+};
+
+export function useCloudSummary() {
+  const [data, setData] = useState<CloudSummary | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const poll = () => {
+      fetch(`${BASE}/cloud-summary`)
+        .then((r) => {
+          if (!r.ok) throw new Error(`HTTP ${r.status}`);
+          return r.json();
+        })
+        .then((d) => {
+          setData(d);
+          setError(null);
+          setLoading(false);
+        })
+        .catch((e) => {
+          setError(e.message);
+          setLoading(false);
+        });
+    };
+    poll();
+    const id = setInterval(poll, SUMMARY_POLL_MS);
+    return () => clearInterval(id);
+  }, []);
+
+  return { data, loading, error };
+}
+
 export function useTagValues() {
   const [tags, setTags] = useState<Record<string, string[]>>({});
   useEffect(() => {

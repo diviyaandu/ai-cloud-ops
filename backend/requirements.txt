@@ -19,3 +19,8 @@ psutil>=5.9.0
 # Azure (install ONLY when you have credentials — not needed for mock mode)
 # azure-mgmt-costmanagement>=4.0.0
 # azure-identity>=1.17.0
+
+azure-identity>=1.17.0
+azure-mgmt-resource>=23.0.0
+azure-mgmt-compute>=30.0.0
+azure-mgmt-web>=7.0.0

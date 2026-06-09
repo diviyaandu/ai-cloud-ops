@@ -10,6 +10,9 @@ from routes.chat     import router as chat_router
 from api.agent       import router as agent_router
 from routes.cloud_resources import router as cloud_resources_router
 from routes.cloud_tags import router as cloud_tags_router
+from routes.cloud_summary import router as cloud_summary_router
+from routes.actions import router as actions_router
+
 
 import state.store as store
 
@@ -25,7 +28,7 @@ app.include_router(chat_router)
 app.include_router(agent_router)
 app.include_router(cloud_resources_router)
 app.include_router(cloud_tags_router)
-
+app.include_router(actions_router)
 
 @app.get("/")
 def home():
@@ -40,3 +43,6 @@ def health():
 @app.get("/stats")
 def stats():
     return {"groq_call_count": store.groq_call_count}
+
+
+app.include_router(cloud_summary_router)

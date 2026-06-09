@@ -1,21 +1,8 @@
 """
 agents/operational.py
 
-Operational Agent — answers questions about system health using real Prometheus data.
-
-ARCHITECTURE CHANGE:
-  Before: metrics = await get_all_metrics()          [direct in-process call]
-  After:  metrics = await mcp_call("get_all_metrics") [HTTP → MCP server → tool]
-
-  The agent no longer imports or executes tool functions directly.
-  It sends an HTTP request to the MCP server, which owns tool execution.
-  The tool result comes back as JSON over the wire — identical shape to before.
-
-  Why this matters:
-    - The MCP server can be scaled, restarted, or swapped independently
-    - Tool execution is now observable at the network layer (logs, traces)
-    - Any future agent (or external client) can call the same tool the same way
-    - agents/ has zero direct dependency on tools/ module code
+Operational Agent — answers questions about Azure resource health and inventory.
+Pulls live data from Azure Resource Graph via the MCP server.
 """
 
 import json
@@ -24,7 +11,7 @@ from typing import Any
 
 from groq import Groq
 from mcp_server.client import mcp_call
-import state.store as store  # ← replaces: from tools.registry import get_all_metrics
+import state.store as store
 
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
 _client: Groq | None = None
@@ -37,64 +24,73 @@ def _groq() -> Groq:
     return _client
 
 
-SYSTEM_PROMPT = """You are an expert Site Reliability Engineer (SRE) AI assistant.
-You have been given live system metrics from Prometheus. Answer the user's question
-concisely and precisely. Focus on actionable insights. If something looks wrong, say
-what it is and what to do about it. Use plain language — no jargon unless the user
-clearly knows what they're doing.
+SYSTEM_PROMPT = """You are an expert Azure cloud operations engineer.
+You have been given live data from Azure Resource Graph about the user's subscription.
+Answer the user's question concisely and precisely based on this data.
 
-Metric status levels: ok = healthy, warning = investigate, critical = act now.
-
-Format your response in 2–3 short paragraphs maximum. Lead with the most important finding.
+Guidelines:
+- Lead with the most important finding (unhealthy resources, recent changes, or inventory summary)
+- Reference specific resource names, types, and regions where relevant
+- If resources are unhealthy or recently modified, highlight them
+- Suggest concrete next steps where relevant
+- Be concise — 3 paragraphs maximum
+- Status levels: ok = healthy, warning = investigate, critical = act now
 """
 
 
 async def run(user_message: str, history: list[dict] | None = None) -> dict[str, Any]:
-    """
-    Fetch live metrics via MCP server and generate an SRE-focused response.
-
-    Returns:
-        {
-            "agent": "operational",
-            "answer": str,
-            "metrics_snapshot": dict,
-            "overall_status": str,
-        }
-    """
     import asyncio
 
-    # 1. Fetch live Prometheus data through the MCP server.
-    #
-    #    OLD: metrics = await get_all_metrics()
-    #    NEW: metrics = await mcp_call("get_all_metrics")
-    #
-    #    The result dict is identical — only the execution path changed.
-    #    If the MCP server is down, mcp_call() raises RuntimeError and we
-    #    catch it below, same as before.
-    try:
-        metrics = await mcp_call("get_all_metrics")
-    except Exception as e:
-        metrics = {"error": str(e), "overall_status": "unknown"}
+    # Fetch inventory + unhealthy resources in parallel
+    inventory_result, unhealthy_result, logs_result = await asyncio.gather(
+        mcp_call("get_resource_inventory"),
+        mcp_call("get_unhealthy_resources"),
+        mcp_call("get_log_summary"),
+        return_exceptions=True,
+    )
 
-    overall_status = metrics.get("overall_status", "unknown")
+    inventory = inventory_result if not isinstance(inventory_result, Exception) \
+        else {"error": str(inventory_result)}
+    unhealthy = unhealthy_result if not isinstance(unhealthy_result, Exception) \
+        else {"error": str(unhealthy_result)}
+    logs = logs_result if not isinstance(logs_result, Exception) \
+        else {"error": str(logs_result)}
 
-    # 2. Build the prompt (unchanged)
-    metrics_summary = json.dumps(metrics, indent=2)
+    # Derive status
+    overall_status = unhealthy.get("status", "ok") if not unhealthy.get("error") else "unknown"
+
+    # Trim to stay within token limits
+    summary = {
+        "total_resources": inventory.get("total_resources", 0),
+        "by_type": inventory.get("by_type", [])[:10],
+        "mode": inventory.get("mode", "unknown"),
+        "unhealthy": {
+            "total": unhealthy.get("total_unhealthy", 0),
+            "critical": unhealthy.get("critical", 0),
+            "warning": unhealthy.get("warning", 0),
+            "status": unhealthy.get("status", "ok"),
+            "resources": unhealthy.get("resources", [])[:5],
+        },
+        "logs": {
+            "errors_24h":   logs.get("recent_errors", {}).get("total", 0),
+            "warnings_24h": logs.get("recent_warnings", {}).get("total", 0),
+            "failed_ops":   logs.get("failed_operations", {}).get("total", 0),
+            "health_events": logs.get("resource_health", {}).get("total", 0),
+            "overall":      logs.get("overall_status", "unknown"),
+        },
+    }
 
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-
     if history:
         messages.extend(history[-6:])
-
     messages.append({
         "role": "user",
         "content": (
-            f"LIVE METRICS (from Prometheus):\n```json\n{metrics_summary}\n```\n\n"
+            f"AZURE RESOURCE DATA (live):\n```json\n{json.dumps(summary, indent=2)}\n```\n\n"
             f"USER QUESTION: {user_message}"
         ),
     })
 
-    # 3. Call Groq (unchanged)
     loop = asyncio.get_event_loop()
 
     def _call():
@@ -113,6 +109,7 @@ async def run(user_message: str, history: list[dict] | None = None) -> dict[str,
         "agent": "operational",
         "agent_label": "⚙️ Operational Agent",
         "answer": answer,
-        "metrics_snapshot": metrics,
+        "inventory": inventory,
+        "unhealthy": unhealthy,
         "overall_status": overall_status,
     }

@@ -12,9 +12,10 @@ from routes.cloud_resources import router as cloud_resources_router
 from routes.cloud_tags import router as cloud_tags_router
 from routes.cloud_summary import router as cloud_summary_router
 from routes.actions import router as actions_router
-
-
 import state.store as store
+import logging
+logging.getLogger("azure.core.pipeline.policies.http_logging_policy").setLevel(logging.WARNING)
+logging.getLogger("azure.identity._internal.get_token_mixin").setLevel(logging.WARNING)
 
 logging.basicConfig(level=logging.INFO)
 

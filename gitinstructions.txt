@@ -4,10 +4,16 @@ git push
 
 python -m uvicorn main:app --reload
 
-npm run dev
-
 git status
 git add .
 git commit -m "message"
 git push
 git pull
+
+# Terminal 1
+python -m uvicorn main:app --port 8000 --reload
+
+# Terminal 2
+python -m uvicorn mcp_server.server:app --port 8001 --reload
+
+npm run dev

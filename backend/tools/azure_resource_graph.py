@@ -53,17 +53,7 @@ def _graph_query(kql: str) -> list[dict]:
 
     # Get token directly from credential
     token = _get_credential().get_token("https://management.azure.com/.default").token
-    token = _get_credential().get_token("https://management.azure.com/.default").token
-    import json, base64
-    # Decode JWT payload (middle part)
-    payload = token.split('.')[1]
-    payload += '=' * (4 - len(payload) % 4)  # fix padding
-    decoded = json.loads(base64.b64decode(payload))
-    print(f"DEBUG token sub: {decoded.get('sub')}")
-    print(f"DEBUG token oid: {decoded.get('oid')}")
-    print(f"DEBUG token roles: {decoded.get('roles')}")
-    print(f"DEBUG token scp: {decoded.get('scp')}")
-    print(f"DEBUG token tid: {decoded.get('tid')}")
+        
     resp = requests.post(
         "https://management.azure.com/providers/Microsoft.ResourceGraph/resources?api-version=2021-03-01",
         headers={
@@ -77,7 +67,6 @@ def _graph_query(kql: str) -> list[dict]:
         timeout=30,
     )
     data = resp.json()
-    print(f"DEBUG raw response: {data}")
 
     # REST API returns {data: [...]} not {columns, rows}
     rows_data = data.get("data", [])
@@ -359,7 +348,7 @@ async def _real_untagged_resources() -> dict[str, Any]:
         Resources
         | where isnull(tags.Project) or isnull(tags.Environment)
             or isnull(tags.Owner) or isnull(tags.Application)
-        | project name, type, resourceGroup, tags
+        | project id, name, type, resourceGroup, tags
         | limit 50
     """
 
@@ -372,6 +361,7 @@ async def _real_untagged_resources() -> dict[str, Any]:
         missing = [t for t in required_tags if t not in present or not present[t]]
         if missing:
             resources.append({
+                "id":             row.get("id"),
                 "name":           row.get("name"),
                 "type":           row.get("type"),
                 "resource_group": row.get("resourceGroup"),

@@ -7,11 +7,20 @@ Pulls live data from Azure Resource Graph via the MCP server.
 
 import json
 import os
+import asyncio
 from typing import Any
 
 from groq import Groq
+from agents.tool_selector import select_tools
 from mcp_server.client import mcp_call
 import state.store as store
+
+ALLOWED_TOOLS = [
+    "get_resource_inventory", "get_unhealthy_resources",
+    "get_resource_group_summary", "get_log_summary",
+    "get_recent_errors", "get_failed_operations",
+    "get_resource_health_logs", "get_full_resource_report",
+]
 
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
 _client: Groq | None = None
@@ -39,46 +48,25 @@ Guidelines:
 
 
 async def run(user_message: str, history: list[dict] | None = None) -> dict[str, Any]:
-    import asyncio
+    # 1. Select tools dynamically
+    tools = await select_tools(user_message, allowed=ALLOWED_TOOLS)
 
-    # Fetch inventory + unhealthy resources in parallel
-    inventory_result, unhealthy_result, logs_result = await asyncio.gather(
-        mcp_call("get_resource_inventory"),
-        mcp_call("get_unhealthy_resources"),
-        mcp_call("get_log_summary"),
-        return_exceptions=True,
+    # 2. Call selected tools in parallel
+    results = await asyncio.gather(
+        *[mcp_call(t) for t in tools], return_exceptions=True
     )
-
-    inventory = inventory_result if not isinstance(inventory_result, Exception) \
-        else {"error": str(inventory_result)}
-    unhealthy = unhealthy_result if not isinstance(unhealthy_result, Exception) \
-        else {"error": str(unhealthy_result)}
-    logs = logs_result if not isinstance(logs_result, Exception) \
-        else {"error": str(logs_result)}
-
-    # Derive status
-    overall_status = unhealthy.get("status", "ok") if not unhealthy.get("error") else "unknown"
-
-    # Trim to stay within token limits
-    summary = {
-        "total_resources": inventory.get("total_resources", 0),
-        "by_type": inventory.get("by_type", [])[:10],
-        "mode": inventory.get("mode", "unknown"),
-        "unhealthy": {
-            "total": unhealthy.get("total_unhealthy", 0),
-            "critical": unhealthy.get("critical", 0),
-            "warning": unhealthy.get("warning", 0),
-            "status": unhealthy.get("status", "ok"),
-            "resources": unhealthy.get("resources", [])[:5],
-        },
-        "logs": {
-            "errors_24h":   logs.get("recent_errors", {}).get("total", 0),
-            "warnings_24h": logs.get("recent_warnings", {}).get("total", 0),
-            "failed_ops":   logs.get("failed_operations", {}).get("total", 0),
-            "health_events": logs.get("resource_health", {}).get("total", 0),
-            "overall":      logs.get("overall_status", "unknown"),
-        },
+    tool_data = {
+        t: (r if not isinstance(r, Exception) else {"error": str(r)})
+        for t, r in zip(tools, results)
     }
+
+    overall_status = "ok"
+    for v in tool_data.values():
+        s = v.get("status", "ok")
+        if s == "critical":
+            overall_status = "critical"
+        elif s == "warning" and overall_status != "critical":
+            overall_status = "warning"
 
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
     if history:
@@ -86,7 +74,7 @@ async def run(user_message: str, history: list[dict] | None = None) -> dict[str,
     messages.append({
         "role": "user",
         "content": (
-            f"AZURE RESOURCE DATA (live):\n```json\n{json.dumps(summary, indent=2)}\n```\n\n"
+            f"AZURE DATA:\n```json\n{json.dumps(tool_data, indent=2)}\n```\n\n"
             f"USER QUESTION: {user_message}"
         ),
     })
@@ -109,7 +97,6 @@ async def run(user_message: str, history: list[dict] | None = None) -> dict[str,
         "agent": "operational",
         "agent_label": "⚙️ Operational Agent",
         "answer": answer,
-        "inventory": inventory,
-        "unhealthy": unhealthy,
+        "tool_data": tool_data,
         "overall_status": overall_status,
     }

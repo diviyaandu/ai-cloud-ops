@@ -8,13 +8,23 @@ Currently uses mocked data. When Azure credentials are ready:
   - No changes needed here.
 """
 
+import asyncio
 import json
 import os
 from typing import Any
 
 from groq import Groq
 from mcp_server.client import mcp_call
+from agents.actions import propose_action
+from agents.tool_selector import select_tools
 import state.store as store
+
+ALLOWED_TOOLS = [
+    "get_monthly_spend", "get_daily_spend", "get_cost_by_resource_group",
+    "get_budget_status", "get_cost_anomalies", "get_full_cost_report",
+    "get_advisor_cost_recommendations", "get_untagged_resources",
+    "get_full_resource_report",
+]
 
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
 _client: Groq | None = None
@@ -44,93 +54,45 @@ Guidelines:
 
 
 async def run(user_message: str, history: list[dict] | None = None) -> dict[str, Any]:
-    """
-    Fetch cost + resource graph data and generate a FinOps-focused response.
+    tools = await select_tools(user_message, allowed=ALLOWED_TOOLS)
 
-    Returns:
-        {
-            "agent": "finops",
-            "answer": str,
-            "cost_report": dict,
-            "resource_report": dict,
-            "overall_status": str,
-        }
-    """
-    import asyncio
-
-    # 1. Fetch cost data and resource graph data in parallel
-    cost_report_result, resource_report_result, advisor_result = await asyncio.gather(
-        mcp_call("get_full_cost_report"),
-        mcp_call("get_full_resource_report"),
-        mcp_call("get_advisor_cost_recommendations"),
-        return_exceptions=True,
+    results = await asyncio.gather(
+        *[mcp_call(t) for t in tools], return_exceptions=True
     )
-    advisor = advisor_result if not isinstance(advisor_result, Exception) else {"error": str(advisor_result)}
+    tool_data = {
+        t: (r if not isinstance(r, Exception) else {"error": str(r)})
+        for t, r in zip(tools, results)
+    }
 
-    cost_report = cost_report_result if not isinstance(cost_report_result, Exception) \
-        else {"error": str(cost_report_result), "mode": "error"}
-
-    resource_report = resource_report_result if not isinstance(resource_report_result, Exception) \
-        else {"error": str(resource_report_result), "mode": "error"}
-
-    # Derive overall status from budget, cost anomalies, and unhealthy resources
-    budget    = cost_report.get("budget_status", {})
-    anomalies = cost_report.get("anomalies", {})
-    unhealthy = resource_report.get("unhealthy_resources", {})
-    untagged  = resource_report.get("untagged_resources", {})
-
-    statuses = [
-        budget.get("status", "ok"),
-        anomalies.get("status", "ok"),
-        unhealthy.get("status", "ok"),
-        untagged.get("status", "ok"),
-    ]
-    if "critical" in statuses:
-        overall_status = "critical"
-    elif "warning" in statuses:
-        overall_status = "warning"
-    else:
-        overall_status = "ok"
-
-    # 2. Build a trimmed summary to stay within Groq token limits
-    #    Send key signals rather than raw full dumps
-    cost_summary = _trim_cost_report(cost_report)
-    resource_summary = _trim_resource_report(resource_report)
-
-    cost_mode    = cost_report.get("mode", "unknown")
-    resource_mode = resource_report.get("mode", "unknown")
-    mode_note = ""
-    if cost_mode == "mock" or resource_mode == "mock":
-        mode_note = "(NOTE: data is MOCK — set USE_REAL_AZURE=True in tools/azure_cost.py and tools/azure_resource_graph.py for live data)"
+    # Auto-propose tagging for untagged resources if fetched
+    proposed_actions = []
+    untagged = tool_data.get("get_untagged_resources", {}) or \
+               tool_data.get("get_full_resource_report", {}).get("untagged_resources", {})
+    for r in (untagged.get("resources", []) or [])[:3]:
+        rid = r.get("id") or r.get("resource_id")
+        if rid:
+            proposed_actions.append(propose_action(
+                "apply_tags",
+                {"resource_id": rid, "tags": {"managed-by": "ai-ops", "auto-tagged": "true"}},
+                proposed_by="finops-agent",
+            ))
 
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-
     if history:
         messages.extend(history[-6:])
-
     messages.append({
         "role": "user",
         "content": (
-            f"AZURE COST REPORT {mode_note}:\n```json\n{cost_summary}\n```\n\n"
-            f"AZURE RESOURCE REPORT:\n```json\n{resource_summary}\n```\n\n"
-            f"AZURE ADVISOR COST RECOMMENDATIONS:\n```json\n{json.dumps({
-                'total': advisor.get('total', 0),
-                'potential_savings_usd': advisor.get('total_potential_savings_usd', 0),
-                'top': advisor.get('recommendations', [])[:5],
-            }, indent=2)}\n```\n\n"
-            f"USER QUESTION:\n{user_message}"
+            f"AZURE DATA:\n```json\n{json.dumps(tool_data, indent=2)}\n```\n\n"
+            f"USER QUESTION: {user_message}"
         ),
     })
 
-    # 3. Call Groq
     loop = asyncio.get_event_loop()
 
     def _call():
         response = _groq().chat.completions.create(
-            model=GROQ_MODEL,
-            messages=messages,
-            temperature=0.3,
-            max_tokens=512,
+            model=GROQ_MODEL, messages=messages, temperature=0.3, max_tokens=512,
         )
         store.increment_groq_calls()
         return response.choices[0].message.content
@@ -141,10 +103,9 @@ async def run(user_message: str, history: list[dict] | None = None) -> dict[str,
         "agent": "finops",
         "agent_label": "💰 FinOps Agent",
         "answer": answer,
-        "cost_report": cost_report,
-        "resource_report": resource_report,
-        "overall_status": overall_status,
-        "data_mode": cost_mode,
+        "tool_data": tool_data,
+        "overall_status": "ok",
+        "proposed_actions": proposed_actions,
     }
 
 

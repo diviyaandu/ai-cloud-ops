@@ -6,13 +6,22 @@ Uses Azure Resource Graph to surface untagged, recently modified,
 and potentially ungoverned resources. Local psutil removed.
 """
 
+import asyncio
 import json
 import os
 from typing import Any
 
 from groq import Groq
 from mcp_server.client import mcp_call
+from agents.tool_selector import select_tools
 import state.store as store
+
+ALLOWED_TOOLS = [
+    "get_untagged_resources", "get_recently_modified_resources",
+    "get_unhealthy_resources", "get_advisor_security_recommendations",
+    "get_advisor_reliability_recommendations", "get_resource_health_logs",
+    "get_failed_operations", "get_full_resource_report",
+]
 
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
 _client: Groq | None = None
@@ -42,60 +51,23 @@ Guidelines:
 
 
 async def run(user_message: str, history: list[dict] | None = None) -> dict[str, Any]:
-    import asyncio
+    tools = await select_tools(user_message, allowed=ALLOWED_TOOLS)
 
-    # Fetch untagged + recently modified + unhealthy in parallel
-    untagged_result, recent_result, unhealthy_result, advisor_result = await asyncio.gather(
-        mcp_call("get_untagged_resources"),
-        mcp_call("get_recently_modified_resources"),
-        mcp_call("get_unhealthy_resources"),
-        mcp_call("get_advisor_security_recommendations"),
-        return_exceptions=True,
+    results = await asyncio.gather(
+        *[mcp_call(t) for t in tools], return_exceptions=True
     )
-    advisor = advisor_result if not isinstance(advisor_result, Exception) else {"error": str(advisor_result)}
-    untagged  = untagged_result  if not isinstance(untagged_result,  Exception) else {"error": str(untagged_result)}
-    recent    = recent_result    if not isinstance(recent_result,    Exception) else {"error": str(recent_result)}
-    unhealthy = unhealthy_result if not isinstance(unhealthy_result, Exception) else {"error": str(unhealthy_result)}
-
-    # Derive overall status
-    statuses = [
-        untagged.get("status", "ok"),
-        unhealthy.get("status", "ok"),
-    ]
-    if "critical" in statuses:
-        overall_status = "critical"
-    elif "warning" in statuses:
-        overall_status = "warning"
-    else:
-        overall_status = "ok"
-
-    summary = {
-        "untagged_resources": {
-            "total": untagged.get("total_untagged", 0),
-            "required_tags": untagged.get("required_tags", []),
-            "status": untagged.get("status", "ok"),
-            "examples": untagged.get("resources", [])[:5],
-        },
-        "recently_modified": {
-            "total": recent.get("total_changes", 0),
-            "window": recent.get("window", "24h"),
-            "changes": recent.get("resources", [])[:5],
-        },
-        "unhealthy_resources": {
-            "total": unhealthy.get("total_unhealthy", 0),
-            "critical": unhealthy.get("critical", 0),
-            "warning": unhealthy.get("warning", 0),
-            "status": unhealthy.get("status", "ok"),
-            "resources": unhealthy.get("resources", [])[:5],
-        },
-        "advisor_security": {
-            "total": advisor.get("total", 0),
-            "high":  advisor.get("high", 0),
-            "status": advisor.get("status", "unknown"),
-            "top": [r["problem"] + " → " + r["solution"]
-                    for r in advisor.get("recommendations", [])[:3]],
-        },
+    tool_data = {
+        t: (r if not isinstance(r, Exception) else {"error": str(r)})
+        for t, r in zip(tools, results)
     }
+
+    overall_status = "ok"
+    for v in tool_data.values():
+        s = v.get("status", "ok")
+        if s == "critical":
+            overall_status = "critical"
+        elif s == "warning" and overall_status != "critical":
+            overall_status = "warning"
 
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
     if history:
@@ -103,7 +75,7 @@ async def run(user_message: str, history: list[dict] | None = None) -> dict[str,
     messages.append({
         "role": "user",
         "content": (
-            f"AZURE SECURITY DATA (live):\n```json\n{json.dumps(summary, indent=2)}\n```\n\n"
+            f"AZURE SECURITY DATA (live):\n```json\n{json.dumps(tool_data, indent=2)}\n```\n\n"
             f"USER QUESTION: {user_message}"
         ),
     })
@@ -126,8 +98,6 @@ async def run(user_message: str, history: list[dict] | None = None) -> dict[str,
         "agent": "security",
         "agent_label": "🔒 Security Agent",
         "answer": answer,
-        "untagged": untagged,
-        "recently_modified": recent,
-        "unhealthy": unhealthy,
+        "tool_data": tool_data,
         "overall_status": overall_status,
     }

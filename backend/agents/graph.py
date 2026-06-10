@@ -40,6 +40,7 @@ class AgentState(TypedDict):
     intent_reasoning: str
     agent_response: dict          # populated by whichever sub-agent runs
     final_answer: str             # extracted plain-text answer
+    proposed_actions: list[dict]
 
 
 # ── Node functions ─────────────────────────────────────────────────────────────
@@ -178,6 +179,7 @@ async def run_agent(user_message: str, history: list[dict] | None = None) -> dic
         "intent_reasoning": "",
         "agent_response": {},
         "final_answer": "",
+        "proposed_actions": [],
     }
 
     final_state = await compiled_graph.ainvoke(initial_state)
@@ -191,4 +193,5 @@ async def run_agent(user_message: str, history: list[dict] | None = None) -> dic
         "intent_reasoning": final_state["intent_reasoning"],
         "overall_status": final_state["agent_response"].get("overall_status", "ok"),
         "data": final_state["agent_response"],
+        "proposed_actions": final_state["agent_response"].get("proposed_actions", []),
     }

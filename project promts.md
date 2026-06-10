@@ -1,539 +1,242 @@
-"use client";
+# AI Cloud Ops — Handoff
 
-import "@/styles/global.css";
-import "@/styles/layout.css";
-import "@/styles/cards.css";
-import "@/styles/dashboard.css";
-import "@/styles/filters.css";
-import "@/styles/chat.css";
-import "@/styles/alerts.css";
-import "@/styles/analysis.css";
+## Project
 
-import { useState, useEffect } from "react";
-import {
-useCloudResources,
-useTagValues,
-useFilteredResources,
-} from "@/hooks/useCloudResources";
-import CloudIntelligence from "@/components/dashboard/CloudIntelligence";
-import AlertsPanel from "@/components/dashboard/AlertsPanel";
-import AnalysisPanel from "@/components/dashboard/AnalysisPanel";
-import AgentPanel from "@/components/chat/AgentPanel";
-import InsightCards from "@/components/dashboard/InsightCards";
-import { useCloudSummary } from "@/hooks/useCloudResources";
-import ActionsPanel from "@/components/dashboard/ActionsPanel";
-import "@/styles/ic.css";
+Full-stack AI-powered Azure cloud operations dashboard.
 
-// ─── Groq Stats ───────────────────────────────────────────────────────────────
-function useGroqStats() {
-const [count, setCount] = useState(0);
-useEffect(() => {
-const poll = () =>
-fetch("http://127.0.0.1:8000/stats")
-.then((r) => r.json())
-.then((d) => setCount(d.groq_call_count ?? 0))
-.catch(() => {});
-poll();
-const id = setInterval(poll, 5000);
-return () => clearInterval(id);
-}, []);
-return count;
-}
+## Directory Structure
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-type NavItem = "overview" | "agent" | "analysis" | "alerts" | "actions";
+```
+ai-cloud-ops/
+├── frontend/
+│   ├── app/
+│   │   └── page.tsx
+│   ├── components/
+│   │   ├── dashboard/
+│   │   │   ├── CloudIntelligence.tsx
+│   │   │   ├── InsightCards.tsx
+│   │   │   ├── AlertsPanel.tsx
+│   │   │   ├── AnalysisPanel.tsx
+│   │   │   └── ActionsPanel.tsx          ← NEW
+│   │   └── chat/
+│   │       └── AgentPanel.tsx
+│   ├── hooks/
+│   │   └── useCloudResources.ts
+│   ├── styles/
+│   │   ├── global.css
+│   │   ├── layout.css
+│   │   ├── cards.css
+│   │   ├── dashboard.css
+│   │   ├── filters.css
+│   │   ├── chat.css
+│   │   ├── alerts.css
+│   │   ├── analysis.css
+│   │   └── ic.css
+│   └── types/
+│       └── cloud.ts
+└── backend/
+    ├── main.py
+    ├── agents/
+    │   ├── graph.py
+    │   ├── router.py
+    │   ├── operational.py
+    │   ├── security.py
+    │   ├── finops.py
+    │   ├── actions.py                    ← NEW
+    │   └── tool_selector.py              ← NEW
+    ├── api/
+    │   └── agent.py
+    ├── routes/
+    │   ├── cloud_resources.py
+    │   ├── cloud_summary.py
+    │   ├── cloud_tags.py
+    │   ├── analysis.py
+    │   ├── chat.py
+    │   ├── metrics.py
+    │   └── actions.py                    ← NEW
+    ├── tools/
+    │   ├── registry.py
+    │   ├── azure_resource_graph.py
+    │   ├── azure_cost.py
+    │   ├── azure_log_analytics.py
+    │   ├── azure_advisor.py
+    │   └── azure_write.py                ← NEW
+    ├── mcp_server/
+    │   ├── server.py
+    │   └── client.py
+    ├── state/
+    │   ├── store.py
+    │   └── action_store.py               ← NEW
+    └── terraform/
+        ├── main.tf
+        ├── variables.tf
+        ├── outputs.tf
+        ├── resource_group.tf
+        └── terraform.tfvars.example
+```
 
-interface ResourceCardProps {
-label: string;
-sublabel: string;
-value: number | null;
-accent: string;
-icon: string;
-loading: boolean;
-region?: string;
-index: number;
-}
+## Tech Stack
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-const TYPE_ACCENTS: Record<string, string> = {
-"microsoft.compute/virtualmachines": "#60a5fa",
-"microsoft.containerservice/managedclusters": "#34d399",
-"microsoft.web/sites": "#fb923c",
-"microsoft.storage/storageaccounts": "#facc15",
-"microsoft.cognitiveservices/accounts": "#a78bfa",
-};
-const DEFAULT_ACCENT = "#2dd4bf";
+- **Frontend**: Next.js, TypeScript, Tailwind, Recharts, modular CSS
+- **Backend**: FastAPI (port 8000), MCP server (port 8001)
+- **AI**: Groq (`llama-3.1-8b-instant`), LangGraph
+- **Azure**: Resource Graph, Cost Management, Log Analytics (`law-finopsai-dev`, `rg-finopsai-dev`), Azure Advisor
+- **Auth**: Service Principal with Contributor role (scoped to both RGs)
 
-function labelFor(type: string): string {
-const short = type.split("/").pop() ?? type;
-return short.replace(/([a-z])([A-Z])/g, "$1 $2");
-}
+## Azure Subscription
 
-// ─── Resource Card ────────────────────────────────────────────────────────────
-function ResourceCard({
-label,
-sublabel,
-value,
-accent,
-icon,
-loading,
-region,
-index,
-}: ResourceCardProps) {
-const isZero = value === 0;
-return (
-<div
-className="rc"
-style={
-{
-"--accent": accent,
-"--delay": `${index * 60}ms`,
-} as React.CSSProperties
-} >
-<span className="rc-corner" />
-<div className="rc-header">
-<span className="rc-icon" aria-hidden>
-{icon}
-</span>
-{region && <span className="rc-region">{region}</span>}
-</div>
-<div className="rc-value-wrap">
-{loading ? (
-<span className="rc-skeleton" />
-) : value === null ? (
-<span className="rc-null">—</span>
-) : (
-<span
-className="rc-value"
-style={{ color: isZero ? "var(--muted)" : "var(--fg)" }} >
-{value}
-</span>
-)}
-</div>
-<div className="rc-footer">
-<span className="rc-label">{label}</span>
-<span className="rc-sub">{sublabel}</span>
-</div>
-<div className="rc-bar">
-<span
-className="rc-bar-fill"
-style={{
-            width: loading || value === null ? "0%" : isZero ? "4%" : "38%",
-          }}
-/>
-</div>
-</div>
-);
-}
+- Subscription: `d91323a4-7619-4450-8e88-c17d3cd3df5e`
+- Resource groups: `rg-finops-prod`, `rg-finopsai-dev`
+- Student account — Cost Management API partially restricted
+- 24 resources across eastus/eastus2/Korea Central
 
-// ─── Sidebar Nav Button ───────────────────────────────────────────────────────
-function NavBtn({
-id,
-label,
-icon,
-active,
-badge,
-onClick,
-}: {
-id: NavItem;
-label: string;
-icon: string;
-active: boolean;
-badge?: number;
-onClick: () => void;
-}) {
-return (
-<button
-className={`nav-btn ${active ? "nav-btn--active" : ""}`}
-onClick={onClick}
-aria-current={active ? "page" : undefined} >
-<span className="nav-icon" aria-hidden>
-{icon}
-</span>
-<span className="nav-label">{label}</span>
-{badge !== undefined && badge > 0 && (
-<span className="nav-badge">{badge}</span>
-)}
-</button>
-);
-}
+## Environment Variables
 
-// ─── Clock ────────────────────────────────────────────────────────────────────
-function LiveClock() {
-const [time, setTime] = useState("");
-useEffect(() => {
-const tick = () =>
-setTime(
-new Date().toLocaleTimeString("en-US", {
-hour: "2-digit",
-minute: "2-digit",
-second: "2-digit",
-hour12: false,
-timeZone: "UTC",
-}),
-);
-tick();
-const id = setInterval(tick, 1000);
-return () => clearInterval(id);
-}, []);
-return <span className="clock">{time}</span>;
-}
+```env
+AZURE_SUBSCRIPTION_ID=d91323a4-7619-4450-8e88-c17d3cd3df5e
+AZURE_TENANT_ID=<your-tenant-id>
+AZURE_CLIENT_ID=bb8accbd-2957-41ab-a7ce-5e253b829c7e
+AZURE_CLIENT_SECRET=<your-secret>
+AZURE_ALLOWED_RGS=rg-finops-prod,rg-finopsai-dev
+AZURE_LOG_ANALYTICS_WORKSPACE_ID=<your-workspace-id>
+GROQ_API_KEY=<your-groq-key>
+GROQ_MODEL=llama-3.1-8b-instant
+```
 
-// ─── Status Pill ──────────────────────────────────────────────────────────────
-function StatusPill({ live, loading }: { live: boolean; loading: boolean }) {
-if (loading)
-return (
-<span className="pill pill--connecting">
-<span className="pill-dot" />
-CONNECTING
-</span>
-);
-return (
-<span className={`pill ${live ? "pill--live" : "pill--offline"}`}>
-<span className={`pill-dot ${live ? "pill-dot--pulse" : ""}`} />
-{live ? "LIVE · AZURE" : "OFFLINE"}
-</span>
-);
-}
+## Current Feature Status
 
-// ─── Tag Filter Bar ───────────────────────────────────────────────────────────
-function TagFilterBar({
-tagValues,
-activeFilters,
-onFilter,
-onClear,
-}: {
-tagValues: Record<string, string[]>;
-activeFilters: Record<string, string>;
-onFilter: (key: string, value: string) => void;
-onClear: () => void;
-}) {
-const keys = ["Project", "Environment", "Owner", "Application"];
-const hasActive = Object.values(activeFilters).some(Boolean);
-return (
-<div className="tag-filter-bar">
-{keys.map((k) => (
-<select
-key={k}
-value={activeFilters[k] || ""}
-onChange={(e) => onFilter(k, e.target.value)}
-className="tag-select" >
-<option value="">{k}</option>
-{(tagValues[k] || []).map((v) => (
-<option key={v} value={v}>
-{v}
-</option>
-))}
-</select>
-))}
-{hasActive && (
-<button className="tag-clear" onClick={onClear}>
-✕ Clear
-</button>
-)}
-</div>
-);
-}
+| Feature                                                  | Status     |
+| -------------------------------------------------------- | ---------- |
+| Azure Resource Graph (live inventory)                    | ✅ Working |
+| Dynamic resource cards (fully data-driven)               | ✅ Working |
+| CloudIntelligence panel (dynamic charts)                 | ✅ Working |
+| Multi-agent system (Operational/Security/FinOps/General) | ✅ Working |
+| Router intent classification                             | ✅ Working |
+| Log Analytics integration                                | ✅ Working |
+| Azure Advisor integration                                | ✅ Working |
+| InsightCards (predicted spend, health, security, logs)   | ✅ Working |
+| Terraform IaC skeleton                                   | ✅ Created |
+| Tag filtering (backend + frontend)                       | ✅ Working |
+| Groq call counter                                        | ✅ Working |
+| Write-back action tools                                  | ✅ Working |
+| Action approval queue (backend)                          | ✅ Working |
+| Actions REST endpoints                                   | ✅ Working |
+| ActionsPanel UI (Approve/Reject)                         | ✅ Working |
+| Agent auto-proposes tagging actions                      | ✅ Working |
+| Dynamic tool selection per agent query                   | ✅ Working |
+| SP upgraded to Contributor on both RGs                   | ✅ Done    |
+| Debug/noise logging removed                              | ✅ Done    |
 
-// ─── Main Page ────────────────────────────────────────────────────────────────
-export default function Home() {
-const { data, loading, error } = useCloudResources();
-const groqCalls = useGroqStats();
-const [activeNav, setActiveNav] = useState<NavItem>("overview");
-const isLive = data?.mode === "live";
+## Agent Architecture
 
-// Tag filters
-const [tagFilters, setTagFilters] = useState<Record<string, string>>({});
-const tagValues = useTagValues();
-const { data: filteredData } = useFilteredResources(tagFilters);
+Each user query = 3 Groq calls (router + tool selector + specialist):
 
-// Resource type search + multi-select
-const allTypes: string[] = (data?.raw_by_type ?? []).map((r) => r.type);
-const [search, setSearch] = useState("");
-const [selected, setSelected] = useState<Set<string>>(new Set());
+- **Router** → classifies into operational / security / finops / general
+- **Tool Selector** → picks 1-4 relevant tools dynamically per query
+- **Operational** → allowed tools: `get_resource_inventory`, `get_unhealthy_resources`, `get_resource_group_summary`, `get_log_summary`, `get_recent_errors`, `get_failed_operations`, `get_resource_health_logs`, `get_full_resource_report`
+- **Security** → allowed tools: `get_untagged_resources`, `get_recently_modified_resources`, `get_unhealthy_resources`, `get_advisor_security_recommendations`, `get_advisor_reliability_recommendations`, `get_resource_health_logs`, `get_failed_operations`, `get_full_resource_report`
+- **FinOps** → allowed tools: `get_monthly_spend`, `get_daily_spend`, `get_cost_by_resource_group`, `get_budget_status`, `get_cost_anomalies`, `get_full_cost_report`, `get_advisor_cost_recommendations`, `get_untagged_resources`, `get_full_resource_report`
+- **General** → direct Groq call, no tools
 
-useEffect(() => {
-if (data?.raw_by_type) setSelected(new Set(allTypes));
-// eslint-disable-next-line react-hooks/exhaustive-deps
-}, [data]);
+All tool calls go via MCP server (port 8001) → `tools/registry.py` → Azure APIs.
 
-const filteredTypes = (data?.raw_by_type ?? []).filter((r) => {
-const matchesSearch = r.type.toLowerCase().includes(search.toLowerCase());
-const matchesSelected = selected.size === 0 || selected.has(r.type);
-return matchesSearch && matchesSelected;
-});
+## Write-back + Approval Gate
 
-const allSelected = selected.size === allTypes.length;
+### How It Works
 
-const { data: summary, loading: summaryLoading } = useCloudSummary();
+1. Agent detects actionable finding (e.g. untagged resources)
+2. Agent calls `propose_action()` → action enters queue with status `pending`
+3. Actions panel in UI shows pending queue
+4. Human clicks Approve → action executes against Azure
+5. Human clicks Reject → action marked rejected, nothing touches Azure
 
-return (
-<>
-<div className="app">
-{/_ ── TOPBAR ──────────────────────────────────────────────────────── _/}
-<header className="topbar">
-<div className="topbar-brand">
-<div className="topbar-logo">⬡</div>
-<div>
-<div className="topbar-title">AI Cloud Ops</div>
-<div className="topbar-sub">Azure · LangGraph · Groq</div>
-</div>
-</div>
-<div className="topbar-right">
-<div className="topbar-stat">
-<span className="topbar-stat-key">Groq calls</span>
-<span className="topbar-stat-val">{groqCalls}</span>
-</div>
-<div className="topbar-divider" />
-<div className="topbar-stat">
-<span className="topbar-stat-key">Resources</span>
-<span className="topbar-stat-val">
-{loading ? "—" : (data?.total ?? "—")}
-</span>
-</div>
-<div className="topbar-divider" />
-<LiveClock />
-<div className="topbar-divider" />
-<StatusPill live={isLive} loading={loading} />
-</div>
-</header>
+### Action Types
 
-        {/* ── SIDEBAR ─────────────────────────────────────────────────────── */}
-        <nav className="sidebar">
-          <span className="sidebar-section">Views</span>
-          <NavBtn
-            id="overview"
-            label="Overview"
-            icon="◈"
-            active={activeNav === "overview"}
-            onClick={() => setActiveNav("overview")}
-          />
-          <NavBtn
-            id="agent"
-            label="AI Copilot"
-            icon="⬡"
-            active={activeNav === "agent"}
-            onClick={() => setActiveNav("agent")}
-          />
-          <NavBtn
-            id="analysis"
-            label="Analysis"
-            icon="◇"
-            active={activeNav === "analysis"}
-            onClick={() => setActiveNav("analysis")}
-          />
-          <NavBtn
-            id="alerts"
-            label="Alerts"
-            icon="▲"
-            active={activeNav === "alerts"}
-            badge={0}
-            onClick={() => setActiveNav("alerts")}
-          />
+| Action              | Params                                                |
+| ------------------- | ----------------------------------------------------- |
+| `apply_tags`        | `resource_id`, `tags` (dict)                          |
+| `stop_vm`           | `resource_group`, `vm_name`                           |
+| `start_vm`          | `resource_group`, `vm_name`                           |
+| `scale_app_service` | `resource_group`, `plan_name`, `sku_name`, `capacity` |
+| `delete_resource`   | `resource_id`                                         |
 
-          <span className="sidebar-section">Subscription</span>
-          <div className="sidebar-footer">
-            <div>
-              <b>Sub</b> d91323a4
-            </div>
-            <div>
-              <b>RG</b> rg-finops-prod
-            </div>
-            <div>
-              <b>Region</b> eastus
-            </div>
-            <div>
-              <b>Model</b> llama-3.1-8b
-            </div>
-            <div>
-              <b>Mode</b>{" "}
-              {loading ? "…" : data?.mode === "live" ? "live" : "mock"}
-            </div>
-          </div>
-        </nav>
+### Guardrails
 
-        {/* ── MAIN ─────────────────────────────────────────────────────────── */}
-        <main className="main">
-          {/* ── Overview ── */}
-          {activeNav === "overview" && (
-            <div className="view">
-              <div className="page-head">
-                <div>
-                  <div className="page-title">Resource Overview</div>
-                  <div className="page-title-sub">
-                    Azure subscription · live inventory
-                  </div>
-                </div>
-                <StatusPill live={isLive} loading={loading} />
-              </div>
+- All write actions check resource group against `ALLOWED_RGS` env var
+- SP Contributor role scoped to `rg-finops-prod` and `rg-finopsai-dev` only
+- No action executes without explicit UI approval
+- `delete_resource` and `stop_vm` blocked outside allowed RGs
 
-              <p className="section-lbl">Live Insights</p>
-              <InsightCards data={summary} loading={summaryLoading} />
+### REST Endpoints
 
-              {/* Resource Inventory */}
-              <p className="section-lbl">Resource Inventory</p>
+```
+POST   /actions                    queue an action
+GET    /actions                    list all actions
+POST   /actions/{id}/approve       approve and execute
+POST   /actions/{id}/reject        reject without executing
+```
 
-              {/* Search + type chips */}
-              <div className="ri-toolbar">
-                <input
-                  className="ri-search"
-                  placeholder="Search resource types…"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                />
-                <div className="ri-multiselect">
-                  <button
-                    className="ri-btn"
-                    onClick={() =>
-                      setSelected(allSelected ? new Set() : new Set(allTypes))
-                    }
-                  >
-                    {allSelected ? "Deselect All" : "Select All"}
-                  </button>
-                  {allTypes.map((t) => (
-                    <button
-                      key={t}
-                      className={`ri-chip ${selected.has(t) ? "ri-chip--on" : ""}`}
-                      onClick={() => {
-                        const next = new Set(selected);
-                        next.has(t) ? next.delete(t) : next.add(t);
-                        setSelected(next);
-                      }}
-                    >
-                      {labelFor(t)}
-                    </button>
-                  ))}
-                </div>
-              </div>
+### Action Statuses
 
-              <div className="rc-grid">
-                {/* Total — always visible */}
-                <ResourceCard
-                  key="total"
-                  index={0}
-                  label="Total Resources"
-                  sublabel="subscription"
-                  value={data?.total ?? null}
-                  accent="#2dd4bf"
-                  icon="◈"
-                  loading={loading}
-                  region="all regions"
-                />
-                {/* Dynamic cards — one per resource type */}
-                {filteredTypes.map((r, i) => (
-                  <ResourceCard
-                    key={r.type}
-                    index={i + 1}
-                    label={labelFor(r.type)}
-                    sublabel={r.type.split("/")[0].replace("microsoft.", "")}
-                    value={r.count}
-                    accent={
-                      TYPE_ACCENTS[r.type.toLowerCase()] ?? DEFAULT_ACCENT
-                    }
-                    icon="◇"
-                    loading={loading}
-                    region={r.regions?.join(" · ")}
-                  />
-                ))}
-              </div>
+```
+pending → approved → executed
+                  → failed
+       → rejected
+```
 
-              {/* Tag Filters */}
-              <TagFilterBar
-                tagValues={tagValues}
-                activeFilters={tagFilters}
-                onFilter={(k, v) => setTagFilters((f) => ({ ...f, [k]: v }))}
-                onClear={() => setTagFilters({})}
-              />
-              {filteredData && (
-                <div className="filter-results">
-                  <span>{filteredData.total} resources matched</span>
-                </div>
-              )}
+## Known Issues / Next Up
 
-              {/* Monitoring */}
-              <p className="section-lbl">Monitoring</p>
-              <div className="content-grid">
-                <div className="left-col">
-                  <div className="panel">
-                    <CloudIntelligence
-                      data={data}
-                      loading={loading}
-                      error={error}
-                    />
-                  </div>
-                </div>
-                <div className="right-col">
-                  <div className="panel" style={{ flex: 1 }}>
-                    <div className="panel-head">
-                      <span className="panel-title">Active Alerts</span>
-                    </div>
-                    <div className="panel-body">
-                      <AlertsPanel rawAlerts={[]} />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
+1. **Untagged resource `id` field** — KQL in `_real_untagged_resources()` now includes `id`, but verify actions are being queued after a FinOps query. If still empty, some resource types may not return `id` from Resource Graph.
 
-          {/* ── AI Copilot ── */}
-          {activeNav === "agent" && (
-            <div className="view">
-              <div className="page-head">
-                <div>
-                  <div className="page-title">AI Copilot</div>
-                  <div className="page-title-sub">
-                    Multi-agent · Router → Operational / Security / FinOps
-                  </div>
-                </div>
-              </div>
-              <div className="agent-wrap">
-                <AgentPanel />
-              </div>
-            </div>
-          )}
+2. **security.py dynamic tool selection** — implemented but not fully tested yet.
 
-          {/* ── Analysis ── */}
-          {activeNav === "analysis" && (
-            <div className="view">
-              <div className="page-head">
-                <div>
-                  <div className="page-title">AI Incident Analysis</div>
-                  <div className="page-title-sub">
-                    Groq llama-3.1-8b · on-demand
-                  </div>
-                </div>
-              </div>
-              <div className="analysis-wrap">
-                <AnalysisPanel />
-              </div>
-            </div>
-          )}
+3. **Action store is in-memory** — restarts clear the queue. Consider persisting to SQLite or Redis if needed.
 
-          {/* ── Alerts ── */}
-          {activeNav === "alerts" && (
-            <div className="view">
-              <div className="page-head">
-                <div>
-                  <div className="page-title">Active Alerts</div>
-                  <div className="page-title-sub">
-                    Prometheus alertmanager · real-time
-                  </div>
-                </div>
-              </div>
-              <div className="panel">
-                <div className="panel-head">
-                  <span className="panel-title">Alert Feed</span>
-                </div>
-                <div className="panel-body">
-                  <AlertsPanel rawAlerts={[]} />
-                </div>
-              </div>
-            </div>
-          )}
-        </main>
-      </div>
-    </>
+4. **No write tools registered in MCP registry** — `azure_write.py` functions are called directly from `routes/actions.py`, not via MCP. If you want agents to propose actions via tool calls in future, register them in `tools/registry.py` with a `propose_` prefix.
 
-);
-}
+5. **Possible next features**:
+   - Email/Teams notification on action proposal
+   - Action history log (persist executed/rejected actions)
+   - Bulk approve
+   - Azure Policy integration for automated tagging enforcement
+
+## Running The Project
+
+```bash
+# Terminal 1
+cd backend && python -m uvicorn main:app --port 8000 --reload
+
+# Terminal 2
+cd backend && python -m uvicorn mcp_server.server:app --port 8001 --reload
+
+# Terminal 3
+cd frontend && npm run dev
+```
+
+## Testing via PowerShell
+
+```powershell
+# Queue an action manually
+Invoke-RestMethod -Method Post -Uri "http://localhost:8000/actions" `
+  -ContentType "application/json" `
+  -Body '{"action_type":"apply_tags","params":{"resource_id":"<resource-id>","tags":{"env":"dev"}},"proposed_by":"agent"}'
+
+# List actions
+Invoke-RestMethod -Uri "http://localhost:8000/actions"
+
+# Approve
+Invoke-RestMethod -Method Post -Uri "http://localhost:8000/actions/<id>/approve"
+
+# Reject
+Invoke-RestMethod -Method Post -Uri "http://localhost:8000/actions/<id>/reject"
+
+# Get real resource IDs
+az resource list --resource-group rg-finopsai-dev --query "[].id" -o tsv
+```
+
+## Preferences
+
+- Responses under 150 words unless more detail requested
+- Exact file paths and diffs over prose
+- Code changes only, no descriptions unless asked
+- Testing via PowerShell `Invoke-RestMethod`

@@ -44,7 +44,12 @@ export default function Home() {
 
   return (
     <div className="app">
-      <Topbar data={data} loading={loading} onRefresh={handleRefresh} />
+      <Topbar
+        data={data}
+        loading={loading}
+        onRefresh={handleRefresh}
+        onSessionChange={handleRefresh}
+      />
       <Sidebar
         activeNav={activeNav}
         onNav={setActiveNav}

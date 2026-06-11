@@ -2,16 +2,19 @@
 
 import LiveClock from "@/components/layout/LiveClock";
 import StatusPill from "@/components/layout/StatusPill";
+import AzureConnection from "@/components/layout/AzureConnection";
 import { useGroqStats } from "@/hooks/useGroqStats";
 import type { CloudResources } from "@/types/cloud";
+import type { AzureSessionStatus } from "@/services/api";
 
 interface TopbarProps {
   data: CloudResources | null;
   loading: boolean;
   onRefresh: () => void;
+  onSessionChange?: (status: AzureSessionStatus) => void;
 }
 
-export default function Topbar({ data, loading, onRefresh }: TopbarProps) {
+export default function Topbar({ data, loading, onRefresh, onSessionChange }: TopbarProps) {
   const groqCalls = useGroqStats();
   const isLive = data?.mode === "live";
 
@@ -36,6 +39,8 @@ export default function Topbar({ data, loading, onRefresh }: TopbarProps) {
             {loading ? "—" : (data?.total ?? "—")}
           </span>
         </div>
+        <div className="topbar-divider" />
+        <AzureConnection onStatusChange={onSessionChange} />
         <div className="topbar-divider" />
         <LiveClock />
         <div className="topbar-divider" />

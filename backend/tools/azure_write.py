@@ -1,19 +1,24 @@
-from azure.identity import ClientSecretCredential
 from azure.mgmt.compute import ComputeManagementClient
 from azure.mgmt.web import WebSiteManagementClient
 from azure.mgmt.resource import ResourceManagementClient
 from azure.mgmt.appcontainers import ContainerAppsAPIClient
 import os
 
-SUBSCRIPTION_ID = os.environ["AZURE_SUBSCRIPTION_ID"]
+from state.session_store import get_credential, get_subscription_id
+
 ALLOWED_RGS = set(os.getenv("AZURE_ALLOWED_RGS", "rg-finops-prod,rg-finopsai-dev").split(","))
 
 def _credential():
-    return ClientSecretCredential(
-        tenant_id=os.environ["AZURE_TENANT_ID"],
-        client_id=os.environ["AZURE_CLIENT_ID"],
-        client_secret=os.environ["AZURE_CLIENT_SECRET"],
-    )
+    credential = get_credential()
+    if credential is None:
+        raise ValueError("Azure credentials are not configured")
+    return credential
+
+def _subscription_id():
+    subscription_id = get_subscription_id()
+    if not subscription_id:
+        raise ValueError("Azure subscription ID is not configured")
+    return subscription_id
 
 def _check_rg(resource_group: str):
     if resource_group not in ALLOWED_RGS:
@@ -21,7 +26,7 @@ def _check_rg(resource_group: str):
 
 def apply_tags(resource_id: str, tags: dict) -> dict:
     cred = _credential()
-    client = ResourceManagementClient(cred, SUBSCRIPTION_ID)
+    client = ResourceManagementClient(cred, _subscription_id())
     parts = resource_id.strip("/").split("/")
     rg = parts[parts.index("resourceGroups") + 1]
     _check_rg(rg)
@@ -34,19 +39,19 @@ def apply_tags(resource_id: str, tags: dict) -> dict:
 
 def stop_vm(resource_group: str, vm_name: str) -> dict:
     _check_rg(resource_group)
-    client = ComputeManagementClient(_credential(), SUBSCRIPTION_ID)
+    client = ComputeManagementClient(_credential(), _subscription_id())
     client.virtual_machines.begin_deallocate(resource_group, vm_name).result()
     return {"action": "stop_vm", "vm": vm_name, "status": "deallocated"}
 
 def start_vm(resource_group: str, vm_name: str) -> dict:
     _check_rg(resource_group)
-    client = ComputeManagementClient(_credential(), SUBSCRIPTION_ID)
+    client = ComputeManagementClient(_credential(), _subscription_id())
     client.virtual_machines.begin_start(resource_group, vm_name).result()
     return {"action": "start_vm", "vm": vm_name, "status": "started"}
 
 def scale_app_service(resource_group: str, plan_name: str, sku_name: str, capacity: int) -> dict:
     _check_rg(resource_group)
-    client = WebSiteManagementClient(_credential(), SUBSCRIPTION_ID)
+    client = WebSiteManagementClient(_credential(), _subscription_id())
     plan = client.app_service_plans.get(resource_group, plan_name)
     plan.sku.name = sku_name
     plan.sku.capacity = capacity
@@ -65,7 +70,7 @@ def _strip_sensitive(app) -> None:
 
 def stop_container_app(resource_group: str, app_name: str) -> dict:
     _check_rg(resource_group)
-    client = ContainerAppsAPIClient(_credential(), SUBSCRIPTION_ID)
+    client = ContainerAppsAPIClient(_credential(), _subscription_id())
     app = client.container_apps.get(resource_group, app_name)
     app.template.scale.min_replicas = 0
     app.template.scale.max_replicas = 1
@@ -75,7 +80,7 @@ def stop_container_app(resource_group: str, app_name: str) -> dict:
 
 def start_container_app(resource_group: str, app_name: str, max_replicas: int = 1) -> dict:
     _check_rg(resource_group)
-    client = ContainerAppsAPIClient(_credential(), SUBSCRIPTION_ID)
+    client = ContainerAppsAPIClient(_credential(), _subscription_id())
     app = client.container_apps.get(resource_group, app_name)
     app.template.scale.min_replicas = 1
     app.template.scale.max_replicas = max_replicas
@@ -86,6 +91,6 @@ def delete_resource(resource_id: str) -> dict:
     parts = resource_id.strip("/").split("/")
     rg = parts[parts.index("resourceGroups") + 1]
     _check_rg(rg)
-    client = ResourceManagementClient(_credential(), SUBSCRIPTION_ID)
+    client = ResourceManagementClient(_credential(), _subscription_id())
     client.resources.begin_delete_by_id(resource_id, api_version="2021-04-01").result()
     return {"action": "delete_resource", "resource_id": resource_id, "status": "deleted"}

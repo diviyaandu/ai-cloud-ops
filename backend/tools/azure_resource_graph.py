@@ -18,6 +18,7 @@ import os
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from dotenv import load_dotenv
+from state.session_store import get_credential, get_subscription_id
 load_dotenv()
 
 # ── Toggle ─────────────────────────────────────────────────────────────────────
@@ -30,26 +31,19 @@ AZURE_CLIENT_SECRET   = os.getenv("AZURE_CLIENT_SECRET", "")
 
 
 # ── Credential helper (cached) ─────────────────────────────────────────────────
-_credential = None
-
 def _get_credential():
-    global _credential
-    if _credential is None:
-        from azure.identity import ClientSecretCredential
-        _credential = ClientSecretCredential(
-            tenant_id=os.getenv("AZURE_TENANT_ID", ""),
-            client_id=os.getenv("AZURE_CLIENT_ID", ""),
-            client_secret=os.getenv("AZURE_CLIENT_SECRET", ""),
-        )
-    return _credential
+    credential = get_credential()
+    if credential is None:
+        raise ValueError("Azure credentials are not configured")
+    return credential
 
 
 def _graph_query(kql: str) -> list[dict]:
     import requests
 
-    sub_id = os.getenv("AZURE_SUBSCRIPTION_ID", "")
+    sub_id = get_subscription_id()
     if not sub_id:
-        raise ValueError("AZURE_SUBSCRIPTION_ID is not set")
+        raise ValueError("Azure subscription ID is not configured")
 
     # Get token directly from credential
     token = _get_credential().get_token("https://management.azure.com/.default").token
@@ -338,7 +332,7 @@ async def _real_recently_modified_resources(hours: int) -> dict[str, Any]:
 
     def _fetch():
         from azure.mgmt.monitor import MonitorManagementClient
-        client = MonitorManagementClient(_get_credential(), os.getenv("AZURE_SUBSCRIPTION_ID", ""))
+        client = MonitorManagementClient(_get_credential(), get_subscription_id())
         events = list(client.activity_logs.list(
             filter=filter_str,
             select="eventTimestamp,operationName,resourceGroupName,resourceType,resourceId,caller,httpRequest",

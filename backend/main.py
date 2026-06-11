@@ -13,6 +13,7 @@ from routes.cloud_tags import router as cloud_tags_router
 from routes.cloud_summary import router as cloud_summary_router
 from routes.actions import router as actions_router
 from routes.resource_operations import router as resource_operations_router
+from routes.session import router as session_router
 
 import state.store as store
 import logging
@@ -33,6 +34,7 @@ app.include_router(cloud_resources_router)
 app.include_router(cloud_tags_router)
 app.include_router(actions_router)
 app.include_router(resource_operations_router)
+app.include_router(session_router)
 
 @app.get("/")
 def home():

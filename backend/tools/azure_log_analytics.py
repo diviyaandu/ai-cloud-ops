@@ -20,23 +20,17 @@ import asyncio
 import requests
 from datetime import datetime, timezone
 from typing import Any
+from state.session_store import get_credential
 
 WORKSPACE_ID = os.getenv("AZURE_LOG_ANALYTICS_WORKSPACE_ID", "")
 QUERY_URL = f"https://api.loganalytics.io/v1/workspaces/{WORKSPACE_ID}/query"
 
-_credential = None
-
 
 def _get_credential():
-    global _credential
-    if _credential is None:
-        from azure.identity import ClientSecretCredential
-        _credential = ClientSecretCredential(
-            tenant_id=os.getenv("AZURE_TENANT_ID", ""),
-            client_id=os.getenv("AZURE_CLIENT_ID", ""),
-            client_secret=os.getenv("AZURE_CLIENT_SECRET", ""),
-        )
-    return _credential
+    credential = get_credential()
+    if credential is None:
+        raise ValueError("Azure credentials are not configured")
+    return credential
 
 
 def _run_query(kql: str, timespan: str = "P1D") -> list[dict]:

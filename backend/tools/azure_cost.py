@@ -17,6 +17,7 @@ import os
 import random
 from datetime import date, timedelta, datetime, timezone
 from typing import Any
+from state.session_store import get_credential, get_subscription_id
 
 # ── Toggle ─────────────────────────────────────────────────────────────────────
 USE_REAL_AZURE = True
@@ -28,18 +29,11 @@ AZURE_CLIENT_SECRET   = os.getenv("AZURE_CLIENT_SECRET", "")
 
 
 # ── Credential helper (cached) ─────────────────────────────────────────────────
-_credential = None
-
 def _get_credential():
-    global _credential
-    if _credential is None:
-        from azure.identity import ClientSecretCredential
-        _credential = ClientSecretCredential(
-            tenant_id=os.getenv("AZURE_TENANT_ID", ""),
-            client_id=os.getenv("AZURE_CLIENT_ID", ""),
-            client_secret=os.getenv("AZURE_CLIENT_SECRET", ""),
-        )
-    return _credential
+    credential = get_credential()
+    if credential is None:
+        raise ValueError("Azure credentials are not configured")
+    return credential
 
 
 # ── Public API ─────────────────────────────────────────────────────────────────
@@ -109,11 +103,11 @@ async def get_full_cost_report() -> dict[str, Any]:
 def _run_cost_query(query_def) -> list:
     """Execute a Cost Management query synchronously (called via executor)."""
     from azure.mgmt.costmanagement import CostManagementClient
-    sub_id = os.getenv("AZURE_SUBSCRIPTION_ID", "")  # ← read here, not at top
+    sub_id = get_subscription_id()
     if not sub_id:
-        raise ValueError("AZURE_SUBSCRIPTION_ID is not set")
+        raise ValueError("Azure subscription ID is not configured")
     client = CostManagementClient(_get_credential())
-    scope = f"/subscriptions/{AZURE_SUBSCRIPTION_ID}"
+    scope = f"/subscriptions/{sub_id}"
     result = client.query.usage(scope, query_def)
     return result.rows or []
 
@@ -256,7 +250,7 @@ async def _real_budget_status() -> dict[str, Any]:
 
     def _fetch():
         from azure.mgmt.consumption import ConsumptionManagementClient
-        _sub = os.getenv("AZURE_SUBSCRIPTION_ID", "")
+        _sub = get_subscription_id()
         client = ConsumptionManagementClient(_get_credential(), _sub)
         scope  = f"/subscriptions/{_sub}"
         return list(client.budgets.list(scope))

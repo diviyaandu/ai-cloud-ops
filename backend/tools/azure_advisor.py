@@ -21,26 +21,24 @@ import asyncio
 import requests
 from datetime import datetime, timezone
 from typing import Any
-
-SUBSCRIPTION_ID = os.getenv("AZURE_SUBSCRIPTION_ID", "")
-ADVISOR_URL = (
-    f"https://management.azure.com/subscriptions/{SUBSCRIPTION_ID}"
-    f"/providers/Microsoft.Advisor/recommendations?api-version=2023-01-01"
-)
-
-_credential = None
+from state.session_store import get_credential, get_subscription_id
 
 
 def _get_credential():
-    global _credential
-    if _credential is None:
-        from azure.identity import ClientSecretCredential
-        _credential = ClientSecretCredential(
-            tenant_id=os.getenv("AZURE_TENANT_ID", ""),
-            client_id=os.getenv("AZURE_CLIENT_ID", ""),
-            client_secret=os.getenv("AZURE_CLIENT_SECRET", ""),
-        )
-    return _credential
+    credential = get_credential()
+    if credential is None:
+        raise ValueError("Azure credentials are not configured")
+    return credential
+
+
+def _advisor_url() -> str:
+    subscription_id = get_subscription_id()
+    if not subscription_id:
+        raise ValueError("Azure subscription ID is not configured")
+    return (
+        f"https://management.azure.com/subscriptions/{subscription_id}"
+        f"/providers/Microsoft.Advisor/recommendations?api-version=2023-01-01"
+    )
 
 
 def _fetch_recommendations() -> list[dict]:
@@ -49,7 +47,7 @@ def _fetch_recommendations() -> list[dict]:
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
 
     results = []
-    url = ADVISOR_URL
+    url = _advisor_url()
 
     while url:
         resp = requests.get(url, headers=headers, timeout=30)

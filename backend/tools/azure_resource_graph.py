@@ -132,6 +132,45 @@ async def get_full_resource_report() -> dict[str, Any]:
     return results
 
 
+
+
+async def get_resource_details(resource_name: str = "", resource_group: str = "") -> dict[str, Any]:
+    """Fetch full details for a specific named resource."""
+    import asyncio
+
+    if not USE_REAL_AZURE:
+        return {"error": "Mock mode — no resource details available"}
+
+    conditions = []
+    if resource_name:
+        conditions.append(f"name =~ '{resource_name}'")
+    if resource_group:
+        conditions.append(f"resourceGroup =~ '{resource_group}'")
+
+    where_clause = " and ".join(conditions) if conditions else "1==1"
+
+    kql = f"""
+        Resources
+        | where {where_clause}
+        | project id, name, type, resourceGroup, location, tags,
+                  state      = tostring(properties.provisioningState),
+                  powerState = tostring(properties.powerState.code),
+                  sku        = tostring(sku.name),
+                  kind
+        | limit 10
+    """
+    loop = asyncio.get_event_loop()
+    rows = await loop.run_in_executor(None, _graph_query, kql)
+
+    return {
+        "tool":        "get_resource_details",
+        "query_name":  resource_name,
+        "query_rg":    resource_group,
+        "total_found": len(rows),
+        "resources":   rows,
+        "status":      "ok" if rows else "not_found",
+    }
+
 # ── Real Azure implementations ─────────────────────────────────────────────────
 
 async def _real_resource_inventory() -> dict[str, Any]:
@@ -139,31 +178,38 @@ async def _real_resource_inventory() -> dict[str, Any]:
 
     kql = """
         Resources
-        | project type, location, tags
-        | summarize count() by type, location
-        | order by count_ desc
+        | project id, name, type, resourceGroup, location,
+                  state = tostring(properties.provisioningState),
+                  tags
+        | order by type asc
+        | limit 100
     """
 
     loop = asyncio.get_event_loop()
     rows = await loop.run_in_executor(None, _graph_query, kql)
 
-    # Aggregate by type across locations
     by_type: dict[str, dict] = {}
     for row in rows:
         t = row.get("type", "unknown")
         loc = row.get("location", "unknown")
-        cnt = int(row.get("count_", 0))
         if t not in by_type:
-            by_type[t] = {"type": t, "count": 0, "regions": []}
-        by_type[t]["count"] += cnt
+            by_type[t] = {"type": t, "count": 0, "regions": [], "resources": []}
+        by_type[t]["count"] += 1
         if loc not in by_type[t]["regions"]:
             by_type[t]["regions"].append(loc)
+        by_type[t]["resources"].append({
+            "id":             row.get("id"),
+            "name":           row.get("name"),
+            "resource_group": row.get("resourceGroup"),
+            "location":       loc,
+            "state":          row.get("state"),
+        })
 
     sorted_types = sorted(by_type.values(), key=lambda x: -x["count"])
     total = sum(r["count"] for r in sorted_types)
 
     return {
-        "metric":         "resource_inventory",
+        "metric":          "resource_inventory",
         "total_resources": total,
         "resource_types":  len(sorted_types),
         "by_type":         sorted_types,
@@ -187,8 +233,9 @@ async def _real_unhealthy_resources() -> dict[str, Any]:
             'microsoft.keyvault/vaults'
           )
         | where isnotempty(tostring(properties.provisioningState))
-        | where properties.provisioningState != 'Succeeded'
-              or properties.powerState.code == 'PowerState/deallocated'
+        | where properties.provisioningState in ('Failed', 'Canceled', 'Deleting', 'Creating', 'Updating')
+              or (isnotempty(tostring(properties.powerState.code))
+                  and properties.powerState.code == 'PowerState/deallocated')
         | project name, type, resourceGroup, location,
                   state = tostring(properties.provisioningState),
                   powerState = tostring(properties.powerState.code)
@@ -200,8 +247,10 @@ async def _real_unhealthy_resources() -> dict[str, Any]:
 
     resources = []
     for row in rows:
-        state = row.get("state") or row.get("powerState") or "Unknown"
-        severity = "critical" if state in ("Failed", "Canceled") else "warning"
+        prov  = row.get("state") or ""
+        power = row.get("powerState") or ""
+        state = prov if prov else power if power else "Unknown"
+        severity = "critical" if prov in ("Failed", "Canceled") else "warning"
         resources.append({
             "name":           row.get("name"),
             "type":           row.get("type"),

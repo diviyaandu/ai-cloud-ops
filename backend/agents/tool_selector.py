@@ -13,15 +13,16 @@ logger = logging.getLogger(__name__)
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
 
 TOOL_DESCRIPTIONS = {
-    "get_resource_inventory":               "List all Azure resources by type and region",
+    "get_resource_inventory":               "List all Azure resources with names, IDs, resource groups, types, regions, and provisioning state",
     "get_unhealthy_resources":              "Find resources in Failed/Degraded state",
     "get_resource_group_summary":           "Summary of resources per resource group",
     "get_recently_modified_resources":      "Resources changed in last 24h and who changed them",
     "get_untagged_resources":               "Resources missing required tags (governance)",
+    "get_resource_details":                 "Fetch full details (state, SKU, tags, properties) for a specific named resource or resource group — use when investigating a named resource",
     "get_full_resource_report":             "Full resource report: inventory + unhealthy + untagged + recent changes",
     "get_recent_errors":                    "Application errors and exceptions in last 24h",
     "get_recent_warnings":                  "Warning-level events in last 24h",
-    "get_resource_health_logs":             "Azure Activity Log health and availability events",
+    "get_resource_health_logs":             "Azure Activity Log health and availability events — includes ResourceId, ResourceName, and Caller",
     "get_top_operations":                   "Most frequent Azure operations in last 24h",
     "get_failed_operations":                "Failed Azure resource operations in last 24h",
     "get_log_summary":                      "Composite log summary: errors + warnings + health + failed ops",

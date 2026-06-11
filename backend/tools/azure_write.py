@@ -2,6 +2,7 @@ from azure.identity import ClientSecretCredential
 from azure.mgmt.compute import ComputeManagementClient
 from azure.mgmt.web import WebSiteManagementClient
 from azure.mgmt.resource import ResourceManagementClient
+from azure.mgmt.appcontainers import ContainerAppsAPIClient
 import os
 
 SUBSCRIPTION_ID = os.environ["AZURE_SUBSCRIPTION_ID"]
@@ -52,6 +53,35 @@ def scale_app_service(resource_group: str, plan_name: str, sku_name: str, capaci
     client.app_service_plans.begin_create_or_update(resource_group, plan_name, plan).result()
     return {"action": "scale_app_service", "plan": plan_name, "sku": sku_name, "capacity": capacity}
 
+
+def _strip_sensitive(app) -> None:
+    if app.configuration:
+        app.configuration.secrets = None
+        app.configuration.registries = None
+    if app.template and app.template.containers:
+        for container in app.template.containers:
+            if container.env:
+                container.env = [e for e in container.env if not e.secret_ref]
+
+def stop_container_app(resource_group: str, app_name: str) -> dict:
+    _check_rg(resource_group)
+    client = ContainerAppsAPIClient(_credential(), SUBSCRIPTION_ID)
+    app = client.container_apps.get(resource_group, app_name)
+    app.template.scale.min_replicas = 0
+    app.template.scale.max_replicas = 1
+    _strip_sensitive(app)
+    client.container_apps.begin_create_or_update(resource_group, app_name, app).result()
+    return {"action": "stop_container_app", "app": app_name, "status": "stopped"}
+
+def start_container_app(resource_group: str, app_name: str, max_replicas: int = 1) -> dict:
+    _check_rg(resource_group)
+    client = ContainerAppsAPIClient(_credential(), SUBSCRIPTION_ID)
+    app = client.container_apps.get(resource_group, app_name)
+    app.template.scale.min_replicas = 1
+    app.template.scale.max_replicas = max_replicas
+    _strip_sensitive(app)
+    client.container_apps.begin_create_or_update(resource_group, app_name, app).result()
+    return {"action": "start_container_app", "app": app_name, "status": "started", "max_replicas": max_replicas}
 def delete_resource(resource_id: str) -> dict:
     parts = resource_id.strip("/").split("/")
     rg = parts[parts.index("resourceGroups") + 1]

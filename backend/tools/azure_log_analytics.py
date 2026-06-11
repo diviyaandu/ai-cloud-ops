@@ -146,7 +146,8 @@ async def get_resource_health_logs() -> dict[str, Any]:
         | where TimeGenerated > ago(24h)
         | where CategoryValue == "ResourceHealth" or Level in ("Critical", "Error", "Warning")
         | project TimeGenerated, ResourceGroup, ResourceProviderValue,
-                  ActivityStatusValue, OperationNameValue, Level, Properties
+                  ResourceId = _ResourceId, ResourceName = tolower(split(_ResourceId, "/")[-1]),
+                  ActivityStatusValue, OperationNameValue, Level, Caller, Properties
         | order by TimeGenerated desc
         | limit 25
     """

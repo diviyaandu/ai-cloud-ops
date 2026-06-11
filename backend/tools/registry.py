@@ -22,6 +22,7 @@ from tools.azure_resource_graph import (
     get_recently_modified_resources,
     get_untagged_resources,
     get_full_resource_report,
+    get_resource_details,
 )
 
 from tools.azure_log_analytics import (
@@ -54,6 +55,7 @@ TOOL_REGISTRY: dict = {
     "get_resource_group_summary":       get_resource_group_summary,
     "get_recently_modified_resources":  get_recently_modified_resources,
     "get_untagged_resources":           get_untagged_resources,
+    "get_resource_details":             get_resource_details,
     "get_full_resource_report":         get_full_resource_report,
     "get_recent_errors":        get_recent_errors,
     "get_recent_warnings":      get_recent_warnings,

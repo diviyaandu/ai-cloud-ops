@@ -12,6 +12,9 @@ export function useCloudResources() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const [tick, setTick] = useState(0);
+  const refresh = () => setTick((t) => t + 1);
+
   useEffect(() => {
     const poll = () => {
       fetch(`${BASE}/cloud-resources`)
@@ -32,9 +35,9 @@ export function useCloudResources() {
     poll();
     const id = setInterval(poll, POLL_INTERVAL_MS);
     return () => clearInterval(id);
-  }, []);
+  }, [tick]);
 
-  return { data, loading, error };
+  return { data, loading, error, refresh };
 }
 
 export type CloudSummary = {
@@ -74,6 +77,9 @@ export function useCloudSummary() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const [tick, setTick] = useState(0);
+  const refresh = () => setTick((t) => t + 1);
+
   useEffect(() => {
     const poll = () => {
       fetch(`${BASE}/cloud-summary`)
@@ -94,9 +100,9 @@ export function useCloudSummary() {
     poll();
     const id = setInterval(poll, SUMMARY_POLL_MS);
     return () => clearInterval(id);
-  }, []);
+  }, [tick]);
 
-  return { data, loading, error };
+  return { data, loading, error, refresh };
 }
 
 export function useTagValues() {

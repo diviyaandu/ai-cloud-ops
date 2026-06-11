@@ -12,6 +12,8 @@ from routes.cloud_resources import router as cloud_resources_router
 from routes.cloud_tags import router as cloud_tags_router
 from routes.cloud_summary import router as cloud_summary_router
 from routes.actions import router as actions_router
+from routes.resource_operations import router as resource_operations_router
+
 import state.store as store
 import logging
 logging.getLogger("azure.core.pipeline.policies.http_logging_policy").setLevel(logging.WARNING)
@@ -30,6 +32,7 @@ app.include_router(agent_router)
 app.include_router(cloud_resources_router)
 app.include_router(cloud_tags_router)
 app.include_router(actions_router)
+app.include_router(resource_operations_router)
 
 @app.get("/")
 def home():

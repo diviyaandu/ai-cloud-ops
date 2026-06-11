@@ -200,6 +200,7 @@ async def _real_resource_inventory() -> dict[str, Any]:
         by_type[t]["resources"].append({
             "id":             row.get("id"),
             "name":           row.get("name"),
+            "type": t,
             "resource_group": row.get("resourceGroup"),
             "location":       loc,
             "state":          row.get("state"),

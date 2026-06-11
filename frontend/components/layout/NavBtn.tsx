@@ -1,6 +1,6 @@
 "use client";
 
-type NavItem = "overview" | "agent" | "analysis" | "alerts" | "actions";
+import type { NavItem } from "@/types/nav";
 
 interface NavBtnProps {
   id: NavItem;

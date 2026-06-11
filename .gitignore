@@ -2,4 +2,6 @@ node_modules/
 __pycache__/
 .env
 venv/
-project prompts/
+project promts.md
+HANDOFF.md
+explanation.md

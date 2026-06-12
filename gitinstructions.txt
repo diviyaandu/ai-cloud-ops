@@ -1,5 +1,5 @@
 git add .
-git commit -m "changed to groq, improved frontend"
+git commit -m "feat: Enhance operational tools for improved resource-level data retrieval and add refresh functionality in frontend"
 git push
 
 python -m uvicorn main:app --reload
